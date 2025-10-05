@@ -2,7 +2,7 @@ import oracledb
 
 # Replace with your actual database credentials
 username = "system"
-password = "Khan@857052"
+password = ""
 dsn = "localhost/orcl"  # Example: 127.0.0.1/orcl or your TNS service name
 
 try:
@@ -24,3 +24,4 @@ finally:
         cursor.close()
     if 'connection' in locals():
         connection.close()
+
