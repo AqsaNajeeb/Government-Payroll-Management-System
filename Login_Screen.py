@@ -10,7 +10,7 @@ import oracledb
 try:
     connection = oracledb.connect(
         user="system",
-        password="Khan@857052",
+        password="",
         dsn="localhost/orcl"
     )
 except Exception as e:
@@ -1953,3 +1953,4 @@ tk.Button(root, text="Forgot Password?", font=("Arial", 10, "underline"), fg="bl
           command=forgot_password).pack()
 
 root.mainloop()
+
