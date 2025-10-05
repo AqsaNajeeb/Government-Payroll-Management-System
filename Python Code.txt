@@ -1,0 +1,1955 @@
+import tkinter as tk
+from tkinter import scrolledtext
+from tkinter.scrolledtext import ScrolledText
+from tkinter import ttk, messagebox, simpledialog, filedialog
+import datetime
+import os
+import oracledb
+
+# ---------------- Oracle DB Connection ----------------
+try:
+    connection = oracledb.connect(
+        user="system",
+        password="",
+        dsn="localhost/orcl"
+    )
+except Exception as e:
+    messagebox.showerror("Database Error", f"Failed to connect to Oracle database:\n{e}")
+    exit()
+
+# ---------------- Reusable DB Connection ----------------
+def connect_db():
+    try:
+        return oracledb.connect(
+            user="system",
+            password="",
+            dsn="localhost/orcl"
+        )
+    except Exception as e:
+        messagebox.showerror("DB Error", str(e))
+        return None
+
+# ---------------- Login Action ----------------
+def login():
+    username = username_entry.get().strip()
+    password = password_entry.get().strip()
+    selected_role = role_var.get()
+
+    if not username or not password or selected_role == "Select Role":
+        messagebox.showerror("Missing Info", "Please fill in all fields and select a role.")
+        return
+
+    try:
+        cursor = connection.cursor()
+        query = """
+            SELECT * FROM USERS_T
+            WHERE LOWER(USERNAME) = :username AND PASSWORD = :password AND ROLE = :role
+        """
+        cursor.execute(query, {
+            "username": username.lower(),
+            "password": password,
+            "role": selected_role
+        })
+
+        result = cursor.fetchone()
+
+        if result:
+            messagebox.showinfo("Login", f"Login successful! Redirecting to {selected_role} Panel...")
+            if selected_role == "HR Manager":
+                open_hr_dashboard()
+            elif selected_role == "Accountant":
+                open_accountant_dashboard()
+            elif selected_role == "Employee":
+                open_employee_dashboard()
+            elif selected_role == "DBA":
+                open_dba_dashboard()
+        else:
+            messagebox.showerror("Login Failed", "Invalid credentials or role selected.")
+    except Exception as e:
+        messagebox.showerror("Login Error", str(e))
+
+# ---------------- Forgot Password ----------------
+def forgot_password():
+    messagebox.showinfo("Forgot Password", "Please contact the administrator to reset your password.")
+
+# ---------------- HR Dashboard ----------------
+def open_hr_dashboard():
+    win = tk.Toplevel()
+    win.title("HR Manager Panel")
+    win.geometry("1000x600")
+
+    tk.Label(win, text="Welcome to HR Manager Panel", font=("Arial", 14)).pack(pady=20)
+
+    sidebar = tk.Frame(win, bd=2, relief="groove")
+    sidebar.place(x=10, y=50, width=200, height=500)
+
+    tk.Label(sidebar, text="Dashboard", font=("Arial", 12, "bold")).pack(pady=10)
+    tk.Button(sidebar, text="All Employees Records", width=20, command=view_basic_employee_records).pack(pady=5)
+    tk.Button(sidebar, text="Search by EmpID", width=20, command=search_employee_by_id).pack(pady=5)
+    tk.Button(sidebar, text="Add Employee", width=20, command=add_employee_form).pack(pady=5)
+    tk.Button(sidebar, text="Update Employee", width=20, command=update_employee_prompt).pack(pady=5)
+    tk.Button(sidebar, text="Leave Report", width=20, command=generate_reports).pack(pady=5)
+    tk.Button(sidebar, text="Attendance Report", width=20, command=generate_attendance_summary).pack(pady=5)
+    tk.Button(sidebar, text="Logout", width=20, command=win.destroy).pack(pady=5)
+
+    global employee_tree
+    info_frame = tk.Frame(win, bd=2, relief="groove")
+    info_frame.place(x=220, y=50, width=750, height=500)
+
+    tk.Label(info_frame, text="Employee Info", font=("Arial", 14, "bold")).pack(pady=5)
+
+    employee_tree = ttk.Treeview(info_frame, columns=("ID", "Name", "Dept"), show='headings')
+    for col in employee_tree["columns"]:
+        employee_tree.heading(col, text=col)
+        employee_tree.column(col, width=200)
+    employee_tree.pack(pady=20, fill="both", expand=True)
+
+    view_basic_employee_records()
+
+# ---------------- View Employees ----------------
+def view_basic_employee_records():
+    conn = connect_db()
+    if not conn:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT E.Emp_ID, E.Emp_Name, D.DepName
+            FROM EMPLOYEE_T E
+            JOIN DEPARTMENT_T D ON E.Dep_ID = D.Dep_ID
+        """)
+        rows = cur.fetchall()
+        employee_tree.delete(*employee_tree.get_children())
+        for row in rows:
+            employee_tree.insert("", "end", values=row)
+    except oracledb.Error as e:
+        messagebox.showerror("Error", str(e))
+    finally:
+        conn.close()
+
+# ---------------- Search by Employee ID ----------------
+def search_employee_by_id():
+    emp_id = simpledialog.askstring("Search Employee", "Enter Employee ID:")
+    if not emp_id:
+        return
+
+    conn = connect_db()
+    if not conn:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT Emp_ID, Emp_Name, Designation, DepName, DOJ, Email, Contact, 
+                   LeaveStatus, AttendanceDate, AttendanceStatus
+            FROM HR_MANAGER_VIEW
+            WHERE Emp_ID = :1
+        """, (emp_id,))
+        rows = cur.fetchall()
+        if not rows:
+            messagebox.showinfo("Not Found", f"No employee found with ID {emp_id}")
+            return
+
+        top = tk.Toplevel()
+        top.title(f"Details of Employee ID: {emp_id}")
+
+        cols = ["Emp_ID", "Name", "Designation", "Department", "DOJ", "Email", "Contact",
+                "LeaveStatus", "AttendanceDate", "AttendanceStatus"]
+        tree = ttk.Treeview(top, columns=cols, show='headings')
+        for col in cols:
+            tree.heading(col, text=col)
+            tree.column(col, width=120)
+        tree.pack(padx=10, pady=10, fill="both", expand=True)
+
+        for r in rows:
+            tree.insert("", "end", values=r)
+    except oracledb.Error as e:
+        messagebox.showerror("Error", str(e))
+    finally:
+        conn.close()
+
+# ---------------- Add Employees ----------------
+def add_employee_form():
+    top = tk.Toplevel()
+    top.title("Add New Employee")
+    top.geometry("500x700")
+
+    # Fields with dropdowns
+    fields = [
+        ("Emp_ID", "text"), ("Grade_ID", "text"), ("Dep_ID", "text"), 
+        ("Emp_Name", "text"), ("DOB (YYYY-MM-DD)", "date"), ("DOJ (YYYY-MM-DD)", "date"),
+        ("City", "text"), ("State", "text"), ("Contact", "text"), 
+        ("Designation", "text"), ("Residency Status", "dropdown", ["Resident", "Non-Resident"]), 
+        ("CNIC", "text"), ("Gender", "dropdown", ["Male", "Female", "Other"]), 
+        ("Marital Status", "dropdown", ["Single", "Married", "Divorced"]),
+        ("Email", "text"), ("Bank Account", "text"), ("Is Active", "dropdown", ["Yes", "No"])
+    ]
+
+    entries = {}
+
+    for idx, (field, field_type, *options) in enumerate(fields):
+        tk.Label(top, text=field).grid(row=idx, column=0, padx=10, pady=5, sticky="w")
+        
+        if field_type == "text" or field_type == "date":
+            entry = tk.Entry(top, width=30)
+            entry.grid(row=idx, column=1, padx=10, pady=5)
+            entries[field] = entry
+        
+        elif field_type == "dropdown":
+            combo = ttk.Combobox(top, values=options[0], state="readonly", width=28)
+            combo.current(0)  # Set default
+            combo.grid(row=idx, column=1, padx=10, pady=5)
+            entries[field] = combo
+
+    def submit_employee():
+        try:
+            values = [e.get() for e in entries.values()]
+            if not all(values):
+                messagebox.showwarning("Validation", "All fields are required!")
+                return
+            
+            dob = datetime.datetime.strptime(values[4], "%Y-%m-%d").date()
+            doj = datetime.datetime.strptime(values[5], "%Y-%m-%d").date()
+
+            conn = connect_db()
+            cur = conn.cursor()
+
+            cur.callproc("Insert_Employee", [
+                int(values[0]), int(values[1]), int(values[2]), values[3],
+                dob, doj, values[6], values[7], values[8], values[9], values[10],
+                int(values[11]), values[12], values[13], values[14], values[15], values[16].upper()
+            ])
+
+            conn.commit()
+            messagebox.showinfo("Success", f"Employee {values[3]} added successfully.")
+            top.destroy()
+            view_basic_employee_records()
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+        finally:
+            conn.close()
+
+    tk.Button(top, text="Add Employee", command=submit_employee).grid(row=len(fields), columnspan=2, pady=20)
+
+# ---------------- Update Employees ----------------
+def update_employee_prompt():
+    emp_id = simpledialog.askstring("Update Employee", "Enter Employee ID to update:")
+    if not emp_id:
+        return
+    try:
+        conn = connect_db()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM EMPLOYEE_T WHERE Emp_ID = :1", (emp_id,))
+        emp = cur.fetchone()
+        col_names = [desc[0] for desc in cur.description]
+        conn.close()
+
+        if not emp:
+            messagebox.showinfo("Not Found", f"No employee found with ID {emp_id}")
+            return
+
+        emp_data = dict(zip(col_names, emp))  # Map column names to values
+        open_update_employee_form(emp_data)
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+
+
+def open_update_employee_form(emp_data):
+    top = tk.Toplevel()
+    top.title("Update Employee")
+    top.geometry("500x700")
+
+    fields = [
+        ("EMP_ID", "text"), ("GRADE_ID", "text"), ("DEP_ID", "text"),
+        ("EMP_NAME", "text"), ("DOB", "date"), ("DOJ", "date"),
+        ("CITY", "text"), ("STATE", "text"), ("CONTACT", "text"),
+        ("DESIGNATION", "text"), ("RESIDENCYSTATUS", "dropdown", ["Resident", "Non-Resident"]),
+        ("CNIC", "text"), ("GENDER", "dropdown", ["Male", "Female", "Other"]),
+        ("MARITALSTATUS", "dropdown", ["Single", "Married", "Divorced"]),
+        ("EMAIL", "text"), ("BANKACCNUMBER", "text"), ("ISACTIVE", "dropdown", ["Yes", "No"])
+    ]
+
+    entries = {}
+
+    for idx, (field, field_type, *options) in enumerate(fields):
+        label = field.replace("_", " ")  # Prettify label for display
+        tk.Label(top, text=label).grid(row=idx, column=0, padx=10, pady=5, sticky="w")
+
+        value = emp_data.get(field, "")  # Use exact Oracle column names
+
+        # Format date objects to YYYY-MM-DD string for display
+        if isinstance(value, datetime.datetime):
+            value = value.strftime("%Y-%m-%d")
+
+        if field_type in ["text", "date"]:
+            entry = tk.Entry(top, width=30)
+            entry.insert(0, str(value) if value is not None else "")
+            entry.grid(row=idx, column=1, padx=10, pady=5)
+            entries[field] = entry
+
+        elif field_type == "dropdown":
+            combo = ttk.Combobox(top, values=options[0], state="readonly", width=28)
+            combo.set(str(value) if value in options[0] else options[0][0])
+            combo.grid(row=idx, column=1, padx=10, pady=5)
+            entries[field] = combo
+
+    def parse_date(date_str):
+        return datetime.datetime.strptime(date_str.split(" ")[0], "%Y-%m-%d").date()
+
+    def update_employee():
+        try:
+            values = {k: e.get() for k, e in entries.items()}
+            if not all(values.values()):
+                messagebox.showwarning("Validation", "All fields are required!")
+                return
+
+            dob = parse_date(values["DOB"])
+            doj = parse_date(values["DOJ"])
+
+            conn = connect_db()
+            cur = conn.cursor()
+
+            cur.callproc("Update_Employee", [
+                int(values["EMP_ID"]), int(values["GRADE_ID"]), int(values["DEP_ID"]), values["EMP_NAME"],
+                dob, doj, values["CITY"], values["STATE"], values["CONTACT"], values["DESIGNATION"],
+                values["RESIDENCYSTATUS"], int(values["CNIC"]), values["GENDER"], values["MARITALSTATUS"],
+                values["EMAIL"], values["BANKACCNUMBER"], values["ISACTIVE"]
+            ])
+
+            conn.commit()
+            messagebox.showinfo("Success", f"Employee {values['EMP_NAME']} updated successfully.")
+            top.destroy()
+            view_basic_employee_records()
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+        finally:
+            conn.close()
+
+    tk.Button(top, text="Update Employee", command=update_employee).grid(row=len(fields), columnspan=2, pady=20)
+
+# ---------------- Leave Report ----------------
+def generate_reports():
+    try:
+        # Establish the database connection
+        conn = connect_db()
+
+        if conn is None:
+            messagebox.showerror("Connection Error", "Failed to connect to the database.")
+            return
+
+        cur = conn.cursor()
+
+        # Query to fetch leave records
+        cur.execute("""
+            SELECT l.Leave_ID, l.Emp_ID, e.Emp_Name, l.LeaveType_ID, 
+                   TO_CHAR(l.StartDate, 'YYYY-MM-DD') AS StartDate,
+                   TO_CHAR(l.EndDate, 'YYYY-MM-DD') AS EndDate,
+                   l.LeaveStatus
+            FROM LEAVE_T l
+            JOIN EMPLOYEE_T e ON l.Emp_ID = e.Emp_ID
+            ORDER BY l.StartDate DESC
+        """)
+        rows = cur.fetchall()
+        col_names = [desc[0] for desc in cur.description]
+        conn.close()
+
+        if not rows:
+            messagebox.showinfo("Reports", "No leave records found.")
+            return
+
+        # Create a new window to display the leave report
+        top = tk.Toplevel()
+        top.title("Leave Report")
+        top.geometry("900x400")
+
+        # Create a Treeview widget to display the report
+        tree = ttk.Treeview(top, columns=col_names, show="headings")
+        tree.pack(fill=tk.BOTH, expand=True)
+
+        # Configure column headers
+        for col in col_names:
+            tree.heading(col, text=col.replace("_", " "))
+            tree.column(col, width=100, anchor="center")
+
+        # Insert leave data into the treeview
+        for row in rows:
+            tree.insert("", "end", values=row)
+
+        # Check for employees exceeding maximum leave days for the year
+        check_excessive_leaves(cur)
+
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+
+# Trigger to Prevent Exceeding Maximum Leave Days
+def check_excessive_leaves(cur):
+    try:
+        cur.execute("""
+            SELECT emp_id, SUM(EndDate - StartDate + 1) AS total_leaves
+            FROM leave_t
+            GROUP BY emp_id
+            HAVING SUM(EndDate - StartDate + 1) > 60
+        """)
+        excessive_leaves = cur.fetchall()
+
+        # Display an alert if any employee has exceeded the allowed leave days
+        for emp_id, total_leaves in excessive_leaves:
+            messagebox.showwarning(
+                "Excessive Leave Alert",
+                f"Employee with ID {emp_id} has exceeded the maximum allowed leave days this year. Total leave taken: {total_leaves} days."
+            )
+
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+
+# ---------------- Attendance Report ----------------
+def generate_attendance_summary():
+    try:
+        conn = connect_db()
+        if conn is None:
+            return
+        cur = conn.cursor()
+
+        # You can adjust this SQL to be grouped by day/month or filtered as needed
+        cur.execute("""
+            SELECT 
+                a.Attendance_ID,
+                a.Emp_ID,
+                e.Emp_Name,
+                TO_CHAR(a.AttendanceDate, 'YYYY-MM-DD') AS Attendance_Date,
+                a.Time,
+                a.Status,
+                a.HoursWorked
+            FROM ATTENDANCE_T a
+            JOIN EMPLOYEE_T e ON a.Emp_ID = e.Emp_ID
+            ORDER BY a.AttendanceDate DESC
+        """)
+        rows = cur.fetchall()
+        col_names = [desc[0] for desc in cur.description]
+        conn.close()
+
+        if not rows:
+            messagebox.showinfo("Attendance Summary", "No attendance records found.")
+            return
+
+        # Create top-level window for displaying attendance summary
+        top = tk.Toplevel()
+        top.title("Attendance Summary")
+        top.geometry("1000x400")
+
+        tree = ttk.Treeview(top, columns=col_names, show="headings")
+        tree.pack(fill=tk.BOTH, expand=True)
+
+        for col in col_names:
+            tree.heading(col, text=col.replace("_", " "))
+            tree.column(col, width=120, anchor="center")
+
+        for row in rows:
+            tree.insert("", "end", values=row)
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Error fetching attendance summary:\n{str(e)}")
+
+# ---------------- Employee Dashboard ----------------
+def open_employee_dashboard():
+    win = tk.Tk()
+    win.title("Employee Dashboard")
+    win.geometry("1000x600")
+
+    tk.Label(win, text="Employee Dashboard", font=("Arial", 16, "bold")).pack(pady=10)
+
+    # -------- Input Frame for Emp ID --------
+    input_frame = tk.Frame(win)
+    input_frame.pack(pady=10)
+
+    tk.Label(input_frame, text="Employee ID:", font=("Arial", 12)).grid(row=0, column=0, padx=5)
+    emp_id_entry = tk.Entry(input_frame, font=("Arial", 12))
+    emp_id_entry.grid(row=0, column=1, padx=5)
+
+    # Label to show verification status
+    status_label = tk.Label(input_frame, text="", font=("Arial", 10), fg="red")
+    status_label.grid(row=1, columnspan=3, pady=5)
+
+    # Placeholder to store verified employee ID
+    emp_id_var = tk.StringVar()
+
+    # -------- Sidebar Buttons --------
+    sidebar = tk.Frame(win, bd=2, relief="groove")
+    sidebar.place(x=10, y=100, width=200, height=470)
+
+    tk.Label(sidebar, text="Menu", font=("Arial", 12, "bold")).pack(pady=10)
+
+    # Buttons - disabled by default
+    btn_view = tk.Button(sidebar, text="View Profile", width=20, state='disabled')
+    btn_view.pack(pady=5)
+    btn_payslip = tk.Button(sidebar, text="View Payslip", width=20, state='disabled')
+    btn_payslip.pack(pady=5)
+    btn_apply_leave = tk.Button(sidebar, text="Apply Leave", width=20, state='disabled')
+    btn_apply_leave.pack(pady=5)
+    btn_leave_status = tk.Button(sidebar, text="View Leave Status", width=20, state='disabled')
+    btn_leave_status.pack(pady=5)
+    btn_records = tk.Button(sidebar, text="View Records", width=20, state='disabled')
+    btn_records.pack(pady=5)
+    btn_aatendance = tk.Button(sidebar, text="View Attendance", width=20, state='disabled')
+    btn_aatendance.pack(pady=5)
+    btn_logout = tk.Button(sidebar, text="Logout", width=20, command=win.destroy)
+    btn_logout.pack(pady=5)
+
+    # -------- Scrollable Info Frame --------
+    canvas = tk.Canvas(win)
+    canvas.place(x=220, y=150, width=750, height=390)
+
+    scrollbar = tk.Scrollbar(win, orient="vertical", command=canvas.yview)
+    scrollbar.place(x=970, y=150, height=390)
+
+    canvas.config(yscrollcommand=scrollbar.set)
+
+    info_frame = tk.Frame(canvas)
+    canvas.create_window((0, 0), window=info_frame, anchor="nw")
+
+    info_frame.bind(
+        "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
+
+    # -------- Verify Employee Function --------
+    def verify_employee():
+        emp_id = emp_id_entry.get().strip()
+        if not emp_id:
+            status_label.config(text="Please enter your Employee ID", fg="red")
+            return
+
+        try:
+            conn = connect_db()
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM EMPLOYEE_T WHERE Emp_ID = :1", (emp_id,))
+            result = cur.fetchone()
+            conn.close()
+
+            if result and result[0] == 1:
+                emp_id_var.set(emp_id)
+                status_label.config(text="Record Found", fg="green")
+                # Enable buttons
+                btn_view.config(state='normal', command=lambda: view_profile(emp_id))
+                btn_payslip.config(state='normal', command=lambda: generate_payslip(emp_id))
+                btn_apply_leave.config(state='normal', command=lambda: apply_leave(emp_id))
+                btn_leave_status.config(state='normal', command=lambda: view_leave_status(emp_id))
+                btn_records.config(state='normal', command=lambda: view_records(emp_id))
+                btn_aatendance.config(state='normal', command=lambda: view_attendance(emp_id))
+
+            else:
+                emp_id_var.set("")
+                status_label.config(text="Employee record not found", fg="red")
+                # Disable buttons
+                btn_view.config(state='disabled')
+                btn_payslip.config(state='disabled')
+                btn_apply_leave.config(state='disabled')
+                btn_leave_status.config(state='disabled')
+                btn_records.config(state='disabled')
+                btn_aatendance.config(state='disabled')
+
+        except Exception as e:
+            status_label.config(text=f"Database Error: {str(e)}", fg="red")
+
+    # Button to trigger verification
+    tk.Button(input_frame, text="Submit", command=verify_employee).grid(row=0, column=2, padx=10)
+
+    # ---------------- View Profile ----------------
+    def view_profile(emp_id):
+        for widget in info_frame.winfo_children():
+            widget.destroy()  # Clear previous content
+
+        try:
+            conn = connect_db()
+            cur = conn.cursor()
+            cur.execute(""" 
+                SELECT 
+                    Emp_ID, Dep_ID, Emp_Name, DOB, DOJ, City, State, Contact,
+                    Designation, ResidencyStatus, CNIC, Gender, MaritalStatus,
+                    Email, BankAccNumber, isActive
+                FROM EMPLOYEE_T
+                WHERE Emp_ID = :1
+            """, (emp_id,))
+            row = cur.fetchone()
+
+            if row:
+                labels = [
+                    "Employee ID", "Department ID", "Name", "Date of Birth", "Date of Joining",
+                    "City", "State", "Contact", "Designation", "Residency Status",
+                    "CNIC", "Gender", "Marital Status", "Email", "Bank Account", "Active Status"
+                ]
+
+                tk.Label(info_frame, text="Employee Profile", font=("Arial", 14, "bold")).pack(pady=10, padx=20, anchor="center")
+
+                for label, value in zip(labels, row):
+                    text = f"{label}: {value}"
+                    tk.Label(info_frame, text=text, font=("Arial", 12), anchor="w", justify="left").pack(fill="x", padx=20, pady=2)
+            else:
+                tk.Label(info_frame, text="No profile found for this employee.", font=("Arial", 12), fg="red").pack()
+        except Exception as e:
+            tk.Label(info_frame, text=f"Error: {str(e)}", font=("Arial", 12), fg="red").pack()
+
+    win.mainloop()
+
+# ---------------- Apply Leave ----------------
+def apply_leave(emp_id):
+    form = tk.Toplevel()
+    form.title("Apply for Leave")
+    form.geometry("400x450")
+
+    tk.Label(form, text="Apply for Leave", font=("Arial", 14, "bold")).pack(pady=10)
+
+    # --- Start Date ---
+    tk.Label(form, text="Start Date (YYYY-MM-DD)").pack(pady=5)
+    start_entry = tk.Entry(form)
+    start_entry.pack(pady=5)
+
+    # --- Max Days ---
+    tk.Label(form, text="Number of Days (Max Days)").pack(pady=5)
+    max_days_entry = tk.Entry(form)
+    max_days_entry.pack(pady=5)
+
+    # --- Leave Type ---
+    tk.Label(form, text="Leave Type").pack(pady=5)
+    leave_type_var = tk.StringVar()
+    leave_type_dropdown = ttk.Combobox(form, textvariable=leave_type_var, state="readonly")
+    leave_type_dropdown.pack(pady=5)
+
+    try:
+        conn = connect_db()
+        cur = conn.cursor()
+        cur.execute("SELECT LeaveType_ID, TYPENAME FROM LEAVETYPE_T")
+        leave_types = cur.fetchall()
+        conn.close()
+        leave_type_dropdown['values'] = [f"{lt[0]} - {lt[1]}" for lt in leave_types]
+    except Exception as e:
+        messagebox.showerror("DB Error", str(e))
+        return
+
+    # --- Reason ---
+    tk.Label(form, text="Leave Reason").pack(pady=5)
+    reason_entry = tk.Entry(form)
+    reason_entry.pack(pady=5)
+
+    def submit_leave():
+        startdate = start_entry.get().strip()
+        max_days = max_days_entry.get().strip()
+        leave_type_text = leave_type_var.get().strip()
+        reason = reason_entry.get().strip()
+
+        if not (startdate and max_days and leave_type_text and reason):
+            messagebox.showwarning("Input Error", "All fields are required.")
+            return
+
+        try:
+            # Calculate next leave_id for this emp_id
+            conn = connect_db()
+            cur = conn.cursor()
+            cur.execute("SELECT NVL(MAX(Leave_ID), 0) + 1 FROM LEAVE_T")
+            next_leave_id = cur.fetchone()[0]
+
+            # Parse values
+            leavetype_id = int(leave_type_text.split(" - ")[0])
+            max_days_int = int(max_days)
+
+            # Calculate end date
+            cur.execute("SELECT TO_DATE(:1, 'YYYY-MM-DD') + :2 FROM DUAL", (startdate, max_days_int - 1))
+            enddate = cur.fetchone()[0]
+
+            # Insert into LEAVE_T
+            cur.execute("""
+                INSERT INTO LEAVE_T 
+                (Leave_ID, Emp_ID, LeaveType_ID, StartDate, EndDate, LeaveReason, LeaveStatus)
+                VALUES (:1, :2, :3, TO_DATE(:4, 'YYYY-MM-DD'), :5, :6, 'Pending')
+            """, (
+                next_leave_id,
+                emp_id,
+                leavetype_id,
+                startdate,
+                enddate,
+                reason
+            ))
+
+            conn.commit()
+            conn.close()
+
+            messagebox.showinfo("Success", f"Leave Applied Successfully.\nEnd Date: {enddate.strftime('%Y-%m-%d')}")
+            form.destroy()
+
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    # --- Submit Button ---
+    tk.Button(form, text="Submit", command=submit_leave).pack(pady=20)
+
+# ---------------- View Payslip ----------------
+def safe_float(value):
+    return 0.0 if value is None else float(value)
+
+def generate_payslip(emp_id):
+    try:
+        conn = connect_db()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT *
+            FROM (
+                SELECT * FROM Employee_View
+                WHERE Emp_ID = :1
+                ORDER BY SalaryYear DESC, SalaryMonth DESC
+            )
+            WHERE ROWNUM = 1
+        """, (emp_id,))
+        data = cur.fetchone()
+        conn.close()
+
+        if not data:
+            messagebox.showinfo("No Data", "No recent payslip found for this employee.")
+            return
+
+        (
+            emp_id, emp_name, contact, grade_id,
+            gross_salary, net_salary, total_deduction, salary_month, salary_year,
+            deduction_amount, tax_type, transport_charges, diet_charges, water_charges,
+            group_insurance, electricity_charges, gas_charges, tv_lic_charges,
+            house_rent, maintenance_charges, deduction_date
+        ) = data
+
+        # Safely convert values for formatting
+        gross_salary = safe_float(gross_salary)
+        net_salary = safe_float(net_salary)
+        total_deduction = safe_float(total_deduction)
+        deduction_amount = safe_float(deduction_amount)
+        transport_charges = safe_float(transport_charges)
+        diet_charges = safe_float(diet_charges)
+        water_charges = safe_float(water_charges)
+        group_insurance = safe_float(group_insurance)
+        electricity_charges = safe_float(electricity_charges)
+        gas_charges = safe_float(gas_charges)
+        tv_lic_charges = safe_float(tv_lic_charges)
+        house_rent = safe_float(house_rent)
+        maintenance_charges = safe_float(maintenance_charges)
+
+        payslip_text = f"""
+        --- PAYSLIP ---
+Employee ID: {emp_id}
+Name: {emp_name}
+Contact: {contact}
+Grade: {grade_id}
+Month: {salary_month} {salary_year}
+
+Gross Salary: Rs. {gross_salary:.2f}
+Net Salary: Rs. {net_salary:.2f}
+Total Deductions: Rs. {total_deduction:.2f}
+
+--- Deduction Breakdown ---
+Tax Type: {tax_type}
+Deduction Amount: Rs. {deduction_amount:.2f}
+Transport Charges: Rs. {transport_charges:.2f}
+Diet Charges: Rs. {diet_charges:.2f}
+Water Charges: Rs. {water_charges:.2f}
+Group Insurance: Rs. {group_insurance:.2f}
+Electricity Charges: Rs. {electricity_charges:.2f}
+Gas Charges: Rs. {gas_charges:.2f}
+TV License Charges: Rs. {tv_lic_charges:.2f}
+House Rent: Rs. {house_rent:.2f}
+Maintenance Charges: Rs. {maintenance_charges:.2f}
+Deduction Date: {deduction_date.strftime('%Y-%m-%d') if deduction_date else 'N/A'}
+        """
+
+        payslip_window = tk.Toplevel()
+        payslip_window.title("Employee Payslip")
+        payslip_window.geometry("520x620")
+
+        text_area = tk.Text(payslip_window, wrap=tk.WORD, font=("Courier", 10))
+        text_area.insert(tk.END, payslip_text.strip())
+        text_area.config(state=tk.DISABLED)
+        text_area.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+
+# ---------------- View Attendance ----------------
+def view_attendance(emp_id):
+    try:
+        # Connect to the database
+        conn = connect_db()
+        cur = conn.cursor()
+
+        # Fetch Employee Information from EMPLOYEE_T table
+        cur.execute("""
+            SELECT Emp_ID, Emp_Name
+            FROM EMPLOYEE_T
+            WHERE Emp_ID = :1
+        """, (emp_id,))
+        employee_info = cur.fetchone()
+
+        # If no employee is found
+        if not employee_info:
+            messagebox.showinfo("No Records", "No employee found with this ID.")
+            return
+
+        # Fetch Attendance Information from ATTENDANCE_T table
+        cur.execute("""
+            SELECT Status, Time, AttendanceDate, HoursWorked
+            FROM ATTENDANCE_T
+            WHERE Emp_ID = :1
+        """, (emp_id,))
+        attendance_info = cur.fetchall()
+
+        # Close the connection
+        conn.close()
+
+        # Format Employee Data
+        employee_data = f"Employee ID: {employee_info[0]}\nEmployee Name: {employee_info[1]}\n"
+
+        # Format Attendance Data
+        attendance_data = "Attendance History:\n"
+        if attendance_info:
+            for record in attendance_info:
+                attendance_data += f"Status: {record[0]}\nTime: {record[1]}\nAttendance Date: {record[2]}\nHours Worked: {record[3]}\n\n"
+        else:
+            attendance_data += "No attendance records found.\n"
+
+        # Show Attendance Data in a pop-up window
+        attendance_window = tk.Toplevel()
+        attendance_window.title(f"Attendance Records for Employee ID: {emp_id}")
+        attendance_window.geometry("600x600")
+
+        # Display the data in a Text widget
+        text_area = tk.Text(attendance_window, wrap=tk.WORD, font=("Courier", 10))
+        text_area.insert(tk.END, f"{employee_data}\n{attendance_data}")
+        text_area.config(state=tk.DISABLED)
+        text_area.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+
+# ---------------- View Records ----------------
+def view_records(emp_id):
+    try:
+        conn = connect_db()
+        cur = conn.cursor()
+
+        # Fetch Employee Information from EMPLOYEE_T table
+        cur.execute("""
+            SELECT "Emp_ID", "Emp_Name", "Contact", "Grade_ID"
+            FROM EMPLOYEE_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        employee_info = cur.fetchone()
+
+        # Fetch Payroll Information from PAYROLL_T table
+        cur.execute("""
+            SELECT "NetSalary", "SalaryMonth", "SalaryYear"
+            FROM PAYROLL_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        payroll_info = cur.fetchone()
+
+        # Fetch Gross Salary from GROSSPAY_T table
+        cur.execute("""
+            SELECT "GrossSalary"
+            FROM GROSSPAY_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        gross_salary_info = cur.fetchone()
+
+        # Fetch Leave Information from LEAVE_T table
+        cur.execute("""
+            SELECT "LeaveType_ID", "StartDate", "EndDate", "LeaveReason", "LeaveStatus"
+            FROM LEAVE_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        leave_info = cur.fetchall()
+
+        # Fetch Deductions Information from DEDUCTIONS_T table
+        cur.execute("""
+            SELECT "DeductionAmount", "TaxType", "TransportCharges", "DietCharges", "WaterCharges",
+                   "GroupInsurance", "ElectricityCharges", "GasCharges", "TV_Lic_Charges",
+                   "HouseRent", "MaintenanceCharges", "DeductionDate"
+            FROM DEDUCTIONS_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        deduction_info = cur.fetchall()
+
+        # Fetch Bonus Information from BONUS_T table
+        cur.execute("""
+            SELECT "Amount", "BonusType", "BonusDate"
+            FROM BONUS_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        bonus_info = cur.fetchall()
+
+        # Fetch Tax Information from TAX_T table
+        cur.execute("""
+            SELECT "TaxAmount", "TaxMonth", "TaxYear"
+            FROM TAX_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        tax_info = cur.fetchall()
+
+        # Fetch Loan Information from LOAN_T table
+        cur.execute("""
+            SELECT "LoanAmount", "LoanType", "LoanPaymentDate", "RemainingBalance"
+            FROM LOAN_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        loan_info = cur.fetchall()
+
+        # Fetch Bank Account Information from BANKACCOUNT_T table
+        cur.execute("""
+            SELECT "AccountNumber", "BankName", "IBAN"
+            FROM BANKACCOUNT_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        bank_info = cur.fetchone()
+
+        # Fetch Fund Information from FUND_T table
+        cur.execute("""
+            SELECT "Amount", "FundType", "FundStatus"
+            FROM FUND_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        fund_info = cur.fetchall()
+
+        # Fetch Advance Information from ADVANCE_T table
+        cur.execute("""
+            SELECT "AdvanceAmount", "AdvanceDate", "RepaymentStatus"
+            FROM ADVANCE_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        advance_info = cur.fetchall()
+
+        # Fetch Installments Information from INSTALLMENTS_T table
+        cur.execute("""
+            SELECT "AmountPaid", "InstallmentDate", "InstallmentStatus"
+            FROM INSTALLMENTS_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        installment_info = cur.fetchall()
+
+        # Fetch Benefit Information from BENEFIT_T table
+        cur.execute("""
+            SELECT "BenefitAmount", "BenefitType", "BenefitStatus"
+            FROM BENEFIT_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        benefit_info = cur.fetchall()
+
+        # Fetch Record Information from RECORD_T table
+        cur.execute("""
+            SELECT "RecordDate", "Remarks"
+            FROM RECORD_T
+            WHERE "Emp_ID" = :1
+        """, (emp_id,))
+        record_info = cur.fetchall()
+
+        conn.close()
+
+        # If no records found, show a message
+        if not employee_info:
+            messagebox.showinfo("No Records", "No records found for this employee.")
+            return
+
+        # Format the data for display
+        employee_data = f"Employee ID: {employee_info[0]}\nName: {employee_info[1]}\nContact: {employee_info[2]}\nGrade ID: {employee_info[3]}\n"
+
+        payroll_data = "Payroll Information:\n"
+        if payroll_info:
+            gross_salary = gross_salary_info[0] if gross_salary_info else "N/A"
+            payroll_data += f"Gross Salary: {gross_salary}\n"
+            payroll_data += f"Net Salary: {payroll_info[0]}\n"
+            payroll_data += f"Salary Month: {payroll_info[1]}\n"
+            payroll_data += f"Salary Year: {payroll_info[2]}\n\n"
+        else:
+            payroll_data += "No payroll info found.\n\n"
+
+        leave_data = "Leave History:\n"
+        if leave_info:
+            for leave in leave_info:
+                leave_data += f"Leave Type ID: {leave[0]}\nStart Date: {leave[1]}\nEnd Date: {leave[2]}\nLeave Reason: {leave[3]}\nLeave Status: {leave[4]}\n\n"
+        else:
+            leave_data += "No leave history found.\n"
+
+        deduction_data = "Deductions History:\n"
+        if deduction_info:
+            for deduction in deduction_info:
+                deduction_data += f"Deduction Amount: {deduction[0]}\nTax Type: {deduction[1]}\nTransport Charges: {deduction[2]}\nDiet Charges: {deduction[3]}\nWater Charges: {deduction[4]}\nGroup Insurance: {deduction[5]}\nElectricity Charges: {deduction[6]}\nGas Charges: {deduction[7]}\nTV License Charges: {deduction[8]}\nHouse Rent: {deduction[9]}\nMaintenance Charges: {deduction[10]}\nDeduction Date: {deduction[11]}\n\n"
+        else:
+            deduction_data += "No deduction history found.\n"
+
+        bonus_data = "Bonus History:\n"
+        if bonus_info:
+            for bonus in bonus_info:
+                bonus_data += f"Amount: {bonus[0]}\nBonus Type: {bonus[1]}\nBonus Date: {bonus[2]}\n\n"
+        else:
+            bonus_data += "No bonus history found.\n"
+
+        tax_data = "Tax History:\n"
+        if tax_info:
+            for tax in tax_info:
+                tax_data += f"Tax Percentage: {tax[0]}\nTax Amount: {tax[1]}\nTax Year: {tax[2]}\n\n"
+        else:
+            tax_data += "No tax history found.\n"
+
+        loan_data = "Loan History:\n"
+        if loan_info:
+            for loan in loan_info:
+                loan_data += f"Loan Amount: {loan[0]}\nLoan Type: {loan[1]}\nLoan Payment Date: {loan[2]}\nRemaining Balance: {loan[3]}\n\n"
+        else:
+            loan_data += "No loan history found.\n"
+
+        bank_data = "Bank History"
+        if bank_info:
+            bank_data = f"Account Number: {bank_info[0]}\nBank Name: {bank_info[1]}\nIBAN: {bank_info[2]}\n"
+
+        fund_data = "Fund History:\n"
+        if fund_info:
+            for fund in fund_info:
+                fund_data += f"Amount: {fund[0]}\nFund Type: {fund[1]}\nFund Status: {fund[2]}\n\n"
+        else:
+            fund_data += "No fund history found.\n"
+
+        advance_data = "Advance History:\n"
+        if advance_info:
+            for advance in advance_info:
+                advance_data += f"Advance Amount: {advance[0]}\nAdvance Date: {advance[1]}\nRepayment Status: {advance[2]}\n\n"
+        else:
+            advance_data += "No advance history found.\n"
+
+        installment_data = "Installments History:\n"
+        if installment_info:
+            for installment in installment_info:
+                installment_data += f"Amount Paid: {installment[0]}\nInstallment Date: {installment[1]}\nInstallment Status: {installment[2]}\n\n"
+        else:
+            installment_data += "No installment history found.\n"
+
+        benefit_data = "Benefit History:\n"
+        if benefit_info:
+            for benefit in benefit_info:
+                benefit_data += f"Benefit Amount: {benefit[0]}\nBenefit Type: {benefit[1]}\nBenefit Status: {benefit[2]}\n\n"
+        else:
+            benefit_data += "No benefit history found.\n"
+
+        record_data = "Record History:\n"
+        if record_info:
+            for record in record_info:
+                record_data += f"Record Date: {record[0]}\nRemarks: {record[1]}\n\n"
+        else:
+            record_data += "No record history found.\n"
+
+        # Show all records in a pop-up window
+        records_window = tk.Toplevel()
+        records_window.title(f"All Records for Employee ID: {emp_id}")
+        records_window.geometry("600x800")
+
+        text_area = tk.Text(records_window, wrap=tk.WORD, font=("Courier", 10))
+        text_area.insert(tk.END, f"{employee_data}\n{payroll_data}\n{leave_data}\n{deduction_data}\n{bonus_data}\n{tax_data}\n{loan_data}\n{bank_data}\n{fund_data}\n{advance_data}\n{installment_data}\n{benefit_data}\n{record_data}")
+        text_area.config(state=tk.DISABLED)
+        text_area.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+
+# ---------------- View Leave Status ----------------
+def view_leave_status(emp_id):
+    try:
+        conn = connect_db()
+        cur = conn.cursor()
+
+        # Fetch leave history for the employee with Emp_ID, LeaveTypeName, and LeaveStatus
+        cur.execute("""
+            SELECT L.Emp_ID, LT.TypeName, L.LeaveStatus
+            FROM LEAVE_T L
+            JOIN LEAVETYPE_T LT ON L.LeaveType_ID = LT.LeaveType_ID
+            WHERE L.Emp_ID = :1
+        """, (emp_id,))
+        
+        leave_history = cur.fetchall()
+        conn.close()
+
+        if not leave_history:
+            messagebox.showinfo("No History", "No leave history found for this employee.")
+            return
+
+        # Build the leave status history message
+        leave_status_text = f"Leave Status for Employee ID: {emp_id}\n\n"
+        leave_status_text += "Leave Type\t\tLeave Status\n"
+        leave_status_text += "-" * 40 + "\n"
+
+        for record in leave_history:
+            emp_id, leave_type, leave_status = record
+            leave_status_text += f"{leave_type}\t\t{leave_status}\n"
+
+        # Show the leave history in a pop-up window
+        leave_status_window = tk.Toplevel()
+        leave_status_window.title("Leave Status History")
+        leave_status_window.geometry("400x400")
+
+        text_area = tk.Text(leave_status_window, wrap=tk.WORD, font=("Courier", 10))
+        text_area.insert(tk.END, leave_status_text.strip())
+        text_area.config(state=tk.DISABLED)
+        text_area.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+
+# ---------------- Accountant Dashboard ----------------
+def open_accountant_dashboard():
+    win = tk.Toplevel()
+    win.title("Accountant Dashboard")
+    win.geometry("1100x700")  
+    win.resizable(True, True)
+
+    # Heading
+    tk.Label(win, text="Accountant Dashboard", font=("Arial", 18, "bold")).pack(pady=10)
+
+    # Sidebar
+    sidebar_width = 250
+    sidebar = tk.Frame(win, bd=2, relief="groove", bg="#f0f0f0")
+    sidebar.place(x=10, y=60, width=sidebar_width, height=520)
+    sidebar.pack_propagate(False)
+
+    # Main Area
+    main_area_width = 1000 - sidebar_width - 30  
+    main_area = tk.Frame(win, bd=2, relief="groove", bg="white")
+    main_area.place(x=sidebar_width + 20, y=60, width=main_area_width, height=520)
+    main_area.pack_propagate(False)
+
+    tk.Label(sidebar, text="Dashboard", font=("Arial", 14, "bold"), bg="#f0f0f0").pack(pady=10)
+    tk.Button(sidebar, text="Calculate Gross Salary", width=25, command=calculate_gross_salary).pack(pady=8)
+    tk.Button(sidebar, text="Calculate Tax", width=25, command=calculate_tax).pack(pady=8)
+    tk.Button(sidebar, text="Calculate Net Salary", width=25, command=calculate_net_salary).pack(pady=8)
+   # tk.Button(sidebar, text="Update Basic Salary", width=25, command=update_basic_salary).pack(pady=8)
+    tk.Button(sidebar, text="Generate Payroll", width=25, command=generate_payroll).pack(pady=8)
+    tk.Button(sidebar, text="Apply Deductions", width=25, command=apply_deductions).pack(pady=8)
+    tk.Button(sidebar, text="Logout", width=25, command=win.destroy).pack(pady=8)
+
+    win.mainloop()
+
+# ---------------- Generate Payroll ----------------
+def generate_payroll():
+    from datetime import datetime
+    win = tk.Toplevel()
+    win.title("Generate Payroll")
+    win.geometry("500x600")
+
+    main_area = tk.Frame(win)
+    main_area.pack(padx=10, pady=10)
+
+    emp_id = simpledialog.askstring("Employee ID", "Enter Employee ID:")
+    if not emp_id:
+        return
+
+    try:
+        emp_id = int(emp_id)
+    except ValueError:
+        messagebox.showerror("Error", "Employee ID must be a number.")
+        return
+
+    try:
+        cur = connection.cursor()
+
+        # Fetch payroll-related data for given employee
+        cur.execute("""
+            SELECT Emp_Name, Grade_ID, Attendance_ID, Tax_ID, Bonus_ID, BankAccount_ID,
+                   NetSalary, GrossSalary
+            FROM FINAL_PAYROLL_VIEW
+            WHERE Emp_ID = :emp_id
+        """, [emp_id])
+        data = cur.fetchone()
+
+        if not data:
+            messagebox.showwarning("Not Found", f"No data found for Employee ID {emp_id}.")
+            return
+
+        # Auto month and year
+        current_month = datetime.now().strftime('%B')
+        current_year = datetime.now().year
+
+        # Field display
+        labels = [
+            "Employee Name", "Grade ID", "Attendance ID", "Tax ID", "Bonus ID",
+            "Bank Account ID", "Gross Salary", "Net Salary", "Salary Month", "Salary Year"
+        ]
+        entries = {}
+
+        for i, label in enumerate(labels):
+            tk.Label(main_area, text=label).grid(row=i, column=0, sticky="w", padx=10, pady=4)
+            entry = tk.Entry(main_area, width=30)
+            if label == "Gross Salary":
+                entry.insert(0, str(data[7]))
+            elif label == "Net Salary":
+                entry.insert(0, str(data[6]))
+            elif label == "Salary Month":
+                entry.insert(0, current_month)
+            elif label == "Salary Year":
+                entry.insert(0, str(current_year))
+            else:
+                entry.insert(0, str(data[i]))
+            entry.config(state="readonly")
+            entry.grid(row=i, column=1, padx=10, pady=4)
+            entries[label] = entry
+
+        # Payment status dropdown
+        tk.Label(main_area, text="Payment Status").grid(row=10, column=0, sticky="w", padx=10, pady=4)
+        payment_status_var = tk.StringVar(value="Pending")
+        payment_dropdown = ttk.Combobox(main_area, textvariable=payment_status_var, values=["Pending", "Paid"], state="readonly", width=27)
+        payment_dropdown.grid(row=10, column=1, padx=10, pady=4)
+
+        def save_payroll():
+            payment_status = payment_status_var.get()
+
+            try:
+                # Generate next transaction ID (start at 96)
+                cur.execute("SELECT MAX(Transaction_ID) FROM PAYROLL_T WHERE Transaction_ID >= 96")
+                transaction_id = cur.fetchone()[0]
+                transaction_id = 96 if transaction_id is None else transaction_id + 1
+
+                gross_salary = float(data[7])
+                net_salary = float(data[6])
+                total_deductions = gross_salary - net_salary
+
+                # Insert into PAYROLL_T
+                cur.execute("""
+                    INSERT INTO PAYROLL_T (
+                        Transaction_ID, Emp_ID, Attendance_ID, Tax_ID, Bonus_ID, BankAccount_ID,
+                        Grade_ID, GrossSalary, NetSalary, TotalDeduction,
+                        PaymentStatus, SalaryMonth, SalaryYear
+                    ) VALUES (
+                        :transaction_id, :emp_id, :attendance_id, :tax_id, :bonus_id, :bankaccount_id,
+                        :grade_id, :grosssalary, :netsalary, :totaldeduction,
+                        :paymentstatus, :salarymonth, :salaryyear
+                    )
+                """, {
+                    'transaction_id': transaction_id,
+                    'emp_id': emp_id,
+                    'attendance_id': data[2],
+                    'tax_id': data[3],
+                    'bonus_id': data[4],
+                    'bankaccount_id': data[5],
+                    'grade_id': data[1],
+                    'grosssalary': gross_salary,
+                    'netsalary': net_salary,
+                    'totaldeduction': total_deductions,
+                    'paymentstatus': payment_status,
+                    'salarymonth': current_month,
+                    'salaryyear': current_year
+                })
+                connection.commit()
+
+                # Payslip output
+                payslip_text = f"""
+Employee Name     : {data[0]}
+Grade ID          : {data[1]}
+Attendance ID     : {data[2]}
+Tax ID            : {data[3]}
+Bonus ID          : {data[4]}
+Bank Account ID   : {data[5]}
+Gross Salary      : {gross_salary}
+Net Salary        : {net_salary}
+Total Deductions  : {total_deductions}
+Salary Month      : {current_month}
+Salary Year       : {current_year}
+Payment Status    : {payment_status}
+                """
+                output_area = tk.Text(main_area, height=13, width=50)
+                output_area.grid(row=12, column=0, columnspan=2, padx=10, pady=10)
+                output_area.insert(tk.END, payslip_text)
+                output_area.config(state='disabled')
+
+            except oracledb.DatabaseError as e:
+                messagebox.showerror("Database Error", e.args[0].message)
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
+        # Save button
+        save_button = tk.Button(main_area, text="Save Payroll", command=save_payroll)
+        save_button.grid(row=11, column=1, padx=10, pady=10)
+
+    except oracledb.DatabaseError as e:
+        messagebox.showerror("Database Error", e.args[0].message)
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+
+
+# ---------------- Calculate Tax ----------------
+def calculate_tax():
+    """
+    Calculates tax for a specific employee for a given month and year,
+    and inserts the result into TAX_T table with auto-generated Tax_ID.
+    """
+
+    # Step 1: Prompt for Employee ID, Tax Month, and Tax Year
+    emp_id = simpledialog.askstring("Employee ID", "Enter Employee ID:")
+    tax_month = simpledialog.askstring("Tax Month", "Enter Tax Month (e.g., May):")
+    tax_year = simpledialog.askstring("Tax Year", "Enter Tax Year (e.g., 2025):")
+
+    if not emp_id or not tax_month or not tax_year:
+        return  # User cancelled
+
+    try:
+        emp_id = int(emp_id)
+    except ValueError:
+        messagebox.showerror("Invalid Input", "Employee ID must be a number.")
+        return
+
+    try:
+        cur = connection.cursor()
+
+        # Step 2: Fetch Gross Salary (monthly)
+        cur.execute("""
+            SELECT GrossSalary
+            FROM GROSSPAY_T
+            WHERE Emp_ID = :emp_id
+        """, [emp_id])
+        result = cur.fetchone()
+        if not result:
+            messagebox.showerror("Error", f"No gross salary found for employee {emp_id}.")
+            return
+        monthly_salary = result[0]
+
+        # Step 3: Fetch TaxType from DEDUCTIONS_T for the given month/year
+        cur.execute("""
+            SELECT TaxType
+            FROM DEDUCTIONS_T
+            WHERE Emp_ID = :emp_id
+              AND TO_CHAR(DeductionDate, 'MMYYYY') = TO_CHAR(TO_DATE(:month || ' ' || :year, 'Month YYYY'), 'MMYYYY')
+              AND ROWNUM = 1
+        """, {'emp_id': emp_id, 'month': tax_month, 'year': tax_year})
+        result = cur.fetchone()
+        if not result:
+            messagebox.showerror("Error", f"No tax type found in deductions for employee {emp_id} in {tax_month} {tax_year}.")
+            return
+        tax_type = result[0].lower()
+
+        # Step 4: Tax Calculation
+        if tax_type == 'income':
+            tax_percentage = (
+                2.5 if monthly_salary <= 100000 else
+                5 if monthly_salary <= 150000 else
+                7.5 if monthly_salary <= 200000 else
+                10 if monthly_salary <= 300000 else
+                12.5 if monthly_salary <= 500000 else
+                15
+            )
+        elif tax_type == 'trade':
+            tax_percentage = (
+                1.5 if monthly_salary <= 100000 else
+                2.5 if monthly_salary <= 150000 else
+                3.5 if monthly_salary <= 200000 else
+                4.5 if monthly_salary <= 300000 else
+                5.5 if monthly_salary <= 500000 else
+                6.5
+            )
+        else:
+            messagebox.showerror("Error", f"Invalid tax type: {tax_type}. Must be 'income' or 'trade'.")
+            return
+
+        tax_amount = monthly_salary * (tax_percentage / 100)
+
+        # Step 5: Fetch Grade_ID
+        cur.execute("""
+            SELECT Grade_ID
+            FROM EMPLOYEE_T
+            WHERE Emp_ID = :emp_id
+        """, [emp_id])
+        result = cur.fetchone()
+        if not result:
+            messagebox.showerror("Error", f"No grade found for employee {emp_id}.")
+            return
+        grade_id = result[0]
+
+        # Step 6: Get next Tax_ID manually starting from 3001
+        cur.execute("SELECT NVL(MAX(Tax_ID), 50) + 1 FROM TAX_T")
+        next_tax_id = cur.fetchone()[0]
+
+        # Step 7: Insert into TAX_T
+        cur.execute("""
+            INSERT INTO TAX_T (Tax_ID, Emp_ID, Grade_ID, TaxAmount, TaxMonth, TaxYear)
+            VALUES (:tax_id, :emp_id, :grade_id, :tax_amount, :tax_month, :tax_year)
+        """, {
+            'tax_id': next_tax_id,
+            'emp_id': emp_id,
+            'grade_id': grade_id,
+            'tax_amount': tax_amount,
+            'tax_month': tax_month.capitalize(),
+            'tax_year': tax_year
+        })
+
+        connection.commit()
+
+        # Step 8: Show confirmation
+        popup = tk.Toplevel()
+        popup.title("Tax Result")
+        label = tk.Label(
+            popup,
+            text=f"✔️ Tax Inserted!\n\nEmployee ID: {emp_id}\nTax Month: {tax_month.capitalize()} {tax_year}\nTax Amount: {tax_amount:.2f}",
+            font=("Arial", 14), padx=20, pady=20
+        )
+        label.pack()
+
+    except oracledb.DatabaseError as e:
+        error, = e.args
+        messagebox.showerror("Database Error", f"❌ {error.message}")
+    except Exception as e:
+        messagebox.showerror("Error", f"⚠️ {str(e)}")
+
+# ---------------- Update Salary ----------------
+#def update_basic_salary():
+ #   messagebox.showinfo("Feature coming soon.")
+
+# ---------------- Calculate Net Salary ----------------
+def calculate_net_salary():
+    from datetime import datetime
+    try:
+        # Step 1: Get the employee ID from the user
+        emp_id = simpledialog.askinteger("Employee ID", "Enter Employee ID:")
+        if emp_id is None:
+            return  # User pressed Cancel
+
+        cursor = connection.cursor()  # Assuming connection is established already
+        current_month = datetime.now().strftime('%b')  # 'Jan', 'Feb', etc.
+        salary_year = datetime.now().year
+        salary_month_numeric = datetime.now().strftime('%Y-%m')  # For example, '2025-05'
+
+        # Step 2: Get Grade ID
+        cursor.execute("SELECT grade_id FROM employee_t WHERE emp_id = :emp_id", {"emp_id": emp_id})
+        result = cursor.fetchone()
+        if not result:
+            messagebox.showerror("Error", "Employee ID not found.")
+            return
+        grade_id = result[0]
+
+        # Step 3: Get Gross Salary
+        cursor.execute("SELECT grosssalary FROM grosspay_t WHERE emp_id = :emp_id", {"emp_id": emp_id})
+        result = cursor.fetchone()
+        if not result or result[0] is None:
+            messagebox.showerror("Error", "Gross Salary not found.")
+            return
+        gross_salary = result[0]
+
+        # Step 4: Get Existing Payroll Deduction
+        cursor.execute("""
+            SELECT totaldeduction FROM payroll_t 
+            WHERE emp_id = :emp_id AND salarymonth = :salarymonth AND salaryyear = :salaryyear
+        """, {"emp_id": emp_id, "salarymonth": current_month, "salaryyear": salary_year})
+        result = cursor.fetchone()
+        total_deductions = 0  # Always recalculate fresh for this payroll cycle
+
+        # Step 5: Loan Installment
+        cursor.execute("""
+            SELECT loan_id FROM loan_t WHERE emp_id = :emp_id AND loanstatus = 'Approved'
+        """, {"emp_id": emp_id})
+        loan_result = cursor.fetchone()
+        loan_amount = 0
+        if loan_result:
+            loan_id = loan_result[0]
+            cursor.execute("""
+                SELECT amountpaid, remainingbalance 
+                FROM installments_t 
+                WHERE loan_id = :loan_id AND installmentdate = TRUNC(SYSDATE)
+            """, {"loan_id": loan_id})
+            inst_result = cursor.fetchone()
+            if inst_result:
+                loan_amount, remaining_balance = inst_result
+
+                cursor.execute("""
+                    UPDATE loan_t SET remainingbalance = remainingbalance - :loan_amount WHERE loan_id = :loan_id
+                """, {"loan_amount": loan_amount, "loan_id": loan_id})
+                cursor.execute("""
+                    UPDATE installments_t SET amountpaid = amountpaid + :loan_amount 
+                    WHERE loan_id = :loan_id AND installmentdate = TRUNC(SYSDATE)
+                """, {"loan_amount": loan_amount, "loan_id": loan_id})
+
+        # Step 6: Advance Recovery
+        cursor.execute("""
+            SELECT NVL(SUM(RemainingBalance), 0) FROM advance_t 
+            WHERE emp_id = :emp_id AND RepaymentStatus = 'Pending'
+        """, {"emp_id": emp_id})
+        advance_amount = cursor.fetchone()[0]
+
+        # Step 7: Fund Recovery
+        cursor.execute("""
+            SELECT NVL(SUM(Amount), 0) FROM fund_t 
+            WHERE emp_id = :emp_id AND FundStatus = 'Approved'
+        """, {"emp_id": emp_id})
+        fund_balance = cursor.fetchone()[0]
+
+        cursor.execute("""
+            UPDATE fund_t 
+            SET GPF_Balance = GPF_Balance + :fund_balance, Amount = Amount - :fund_balance 
+            WHERE emp_id = :emp_id AND FundStatus = 'Approved'
+        """, {"fund_balance": fund_balance, "emp_id": emp_id})
+
+        # Step 8: Tax Deduction
+        cursor.execute("""
+            SELECT NVL(SUM(TaxAmount), 0) FROM tax_t 
+            WHERE emp_id = :emp_id AND tax_id >= 3006
+        """, {"emp_id": emp_id})
+        tax_deduction = cursor.fetchone()[0]
+
+        # Step 9: Leave Deduction
+        per_day_salary = gross_salary / 22
+        unpaid_leave_days = 0
+        cursor.execute("""
+            SELECT StartDate, EndDate FROM LEAVE_T 
+            WHERE emp_id = :emp_id AND LeaveStatus = 'Approved'
+              AND TO_CHAR(StartDate, 'YYYY-MM') = :salary_month_numeric
+        """, {"emp_id": emp_id, "salary_month_numeric": salary_month_numeric})
+        for row in cursor.fetchall():
+            start_date, end_date = row
+            unpaid_leave_days += (end_date - start_date).days + 1
+        leave_deduction = unpaid_leave_days * per_day_salary
+
+        # Step 10: Final Net Salary Calculation
+        final_net_salary = gross_salary - (
+            total_deductions + loan_amount + advance_amount + 
+            fund_balance + tax_deduction + leave_deduction
+        )
+
+        # Step 11: Get Next Transaction_ID from Sequence
+        cursor.execute("SELECT payroll_seq.NEXTVAL FROM dual")
+        transaction_id = cursor.fetchone()[0]
+
+        # Step 12: Update or Insert into PAYROLL_T
+        cursor.execute("""
+            MERGE INTO payroll_t p
+            USING (SELECT :emp_id AS emp_id, :salarymonth AS salarymonth, :salaryyear AS salaryyear FROM dual) d
+            ON (p.emp_id = d.emp_id AND p.salarymonth = d.salarymonth AND p.salaryyear = d.salaryyear)
+            WHEN MATCHED THEN
+                UPDATE SET totaldeduction = :totaldeduction
+            WHEN NOT MATCHED THEN
+                INSERT (transaction_id, emp_id, salarymonth, salaryyear, totaldeduction)
+                VALUES (payroll_seq.NEXTVAL, :emp_id, :salarymonth, :salaryyear, :totaldeduction)
+        """, {
+            "emp_id": emp_id,
+            "salarymonth": current_month,
+            "salaryyear": salary_year,
+            "totaldeduction": loan_amount + advance_amount + fund_balance + tax_deduction + leave_deduction
+        })
+
+        # Step 13: Update Net Salary in GROSSPAY_T
+        cursor.execute("""
+            UPDATE grosspay_t SET netsalary = :final_net_salary WHERE emp_id = :emp_id
+        """, {"final_net_salary": final_net_salary, "emp_id": emp_id})
+
+        connection.commit()  # Commit changes to the database
+        cursor.close()  # Close the cursor
+
+        # Step 14: Display Final Net Salary in a Dialog Box
+        result_dialog = tk.Toplevel()
+        result_dialog.title("Final Net Salary")
+        result_dialog.geometry("320x150")
+        result_dialog.resizable(False, False)
+
+        tk.Label(result_dialog, text=f"Final Net Salary: ${final_net_salary:.2f}",
+                 font=("Helvetica", 14, "bold"), fg="green").pack(pady=30)
+        tk.Button(result_dialog, text="OK", command=result_dialog.destroy).pack()
+
+    except oracledb.DatabaseError as e:
+        messagebox.showerror("Database Error", f"❌ Oracle Error: {str(e)}")
+    except Exception as ex:
+        messagebox.showerror("Unexpected Error", f"⚠️ {str(ex)}")
+
+# ---------------- Calculate Gross Salary ----------------
+def calculate_gross_salary():
+    # Ask user for Employee ID
+    emp_id = simpledialog.askstring("Calculate Gross Salary", "Enter Employee ID:")
+    if not emp_id:
+        return  # User cancelled
+
+    try:
+        emp_id = int(emp_id)
+    except ValueError:
+        messagebox.showerror("Invalid Input", "Employee ID must be a number.")
+        return
+
+    try:
+        cur = connection.cursor()
+
+        # Step 1: Call procedure to calculate gross salary
+        cur.callproc("CALCULATE_GROSSSALARY", [emp_id])
+
+        # Step 2: Fetch updated Gross Salary from GROSSPAY_T
+        cur.execute("SELECT GrossSalary FROM GROSSPAY_T WHERE Emp_ID = :1", [emp_id])
+        result = cur.fetchone()
+
+        if result:
+            gross_salary = result[0]
+
+            # Step 3: Show result in popup window
+            popup = tk.Toplevel()
+            popup.title("Gross Salary Result")
+
+            label = tk.Label(popup, text=f"Employee ID: {emp_id}\nGross Salary: {gross_salary:.2f}",
+                             font=("Arial", 14), padx=20, pady=20)
+            label.pack()
+
+        else:
+            messagebox.showinfo("No Data", "Gross salary record not found after calculation.")
+
+    except oracledb.DatabaseError as e:
+        error, = e.args
+        messagebox.showerror("Database Error", error.message)
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+
+# ---------------- Apply Deductions ----------------
+def apply_deductions():
+    def submit_form():
+        try:
+            emp_id = emp_id_entry.get()
+            if not emp_id.isdigit():
+                return messagebox.showwarning("Validation", "❌ Employee ID must be a number.")
+
+            emp_id = int(emp_id)
+            cur = connection.cursor()
+
+            # Fetch related IDs
+            cur.execute("SELECT Dep_ID FROM EMPLOYEE_T WHERE Emp_ID = :id", {'id': emp_id})
+            dep_row = cur.fetchone()
+            if not dep_row:
+                return messagebox.showerror("Not Found", f"No department found for Employee ID {emp_id}")
+            dep_id = dep_row[0]
+
+            cur.execute("SELECT Transaction_ID FROM PAYROLL_T WHERE Emp_ID = :id", {'id': emp_id})
+            txn_row = cur.fetchone()
+            if not txn_row:
+                return messagebox.showerror("Not Found", f"No transaction found for Employee ID {emp_id}")
+            transaction_id = txn_row[0]
+
+            cur.execute("SELECT Fund_ID FROM FUND_T WHERE Emp_ID = :id", {'id': emp_id})
+            fund_row = cur.fetchone()
+            if not fund_row:
+                return messagebox.showerror("Not Found", f"No fund found for Employee ID {emp_id}")
+            fund_id = fund_row[0]
+
+            # Collect charges
+            try:
+                transport = float(transport_entry.get())
+                diet = float(diet_entry.get())
+                water = float(water_entry.get())
+                electricity = float(electricity_entry.get())
+                gas = float(gas_entry.get())
+                maintenance = float(maintenance_entry.get())
+            except ValueError:
+                return messagebox.showerror("Input Error", "❌ All charges must be valid numbers.")
+
+            tax_type = tax_type_var.get()
+            group_insurance = 1500
+            tv_lic = 40
+            house_rent = 700
+
+            total_deduction = sum([
+                transport, diet, water, electricity, gas, maintenance,
+                group_insurance, tv_lic, house_rent
+            ])
+
+            # Generate Deduction_ID
+            cur.execute("SELECT NVL(MAX(Deduction_ID), 7000) + 1 FROM DEDUCTIONS_T")
+            deduction_id = cur.fetchone()[0]
+
+            # Insert deduction
+            cur.execute("""
+                INSERT INTO DEDUCTIONS_T (
+                    Deduction_ID, Emp_ID, Transaction_ID, Dep_ID, Fund_ID,
+                    TaxType, TransportCharges, DietCharges, WaterCharges,
+                    GroupInsurance, ElectricityCharges, GasCharges,
+                    TV_Lic_Charges, HouseRent, MaintenanceCharges,
+                    DeductionAmount, DeductionDate
+                ) VALUES (
+                    :deduction_id, :emp_id, :transaction_id, :dep_id, :fund_id,
+                    :tax_type, :transport, :diet, :water,
+                    :group_insurance, :electricity, :gas,
+                    :tv_lic, :house_rent, :maintenance,
+                    :total_deduction, SYSDATE
+                )
+            """, {
+                'deduction_id': deduction_id,
+                'emp_id': emp_id,
+                'transaction_id': transaction_id,
+                'dep_id': dep_id,
+                'fund_id': fund_id,
+                'tax_type': tax_type,
+                'transport': transport,
+                'diet': diet,
+                'water': water,
+                'group_insurance': group_insurance,
+                'electricity': electricity,
+                'gas': gas,
+                'tv_lic': tv_lic,
+                'house_rent': house_rent,
+                'maintenance': maintenance,
+                'total_deduction': total_deduction
+            })
+
+            connection.commit()
+            messagebox.showinfo("Success", f"✅ Deductions applied successfully!\nTotal: {total_deduction:.2f}")
+            window.destroy()
+
+        except oracledb.DatabaseError as e:
+            error, = e.args
+            messagebox.showerror("Database Error", f"❌ {error.message}")
+        except Exception as e:
+            messagebox.showerror("Error", f"⚠️ {str(e)}")
+
+    # Tkinter window
+    window = tk.Toplevel()
+    window.title("Apply Deductions")
+    window.geometry("400x500")
+    window.resizable(False, False)
+
+    # Employee ID
+    tk.Label(window, text="Enter Employee ID:").pack(pady=5)
+    emp_id_entry = tk.Entry(window, width=30)
+    emp_id_entry.pack(pady=5)
+
+    # Dropdown for Tax Type
+    tk.Label(window, text="Select Tax Type:").pack(pady=5)
+    tax_type_var = tk.StringVar()
+    tax_type_combo = ttk.Combobox(window, textvariable=tax_type_var, values=["income", "trade"], state="readonly", width=28)
+    tax_type_combo.current(0)
+    tax_type_combo.pack(pady=5)
+
+    # Variable Charges
+    def charge_field(label):
+        tk.Label(window, text=label + ":").pack(pady=3)
+        entry = tk.Entry(window, width=30)
+        entry.pack()
+        return entry
+
+    transport_entry = charge_field("Transport Charges")
+    diet_entry = charge_field("Diet Charges")
+    water_entry = charge_field("Water Charges")
+    electricity_entry = charge_field("Electricity Charges")
+    gas_entry = charge_field("Gas Charges")
+    maintenance_entry = charge_field("Maintenance Charges")
+
+    # Submit Button
+    tk.Button(window, text="Apply Deductions", command=submit_form, bg="#4CAF50", fg="white", padx=10).pack(pady=20)
+
+# ---------------- DBA Dashboard ----------------
+def open_dba_dashboard():
+    win = tk.Tk()
+    win.title("DBA Dashboard")
+    win.geometry("1000x600")  # Increased window size
+
+    # Title
+    ttk.Label(win, text="DBA Dashboard", font=("Arial", 16, "bold")).pack(pady=10)
+
+    # Sidebar
+    sidebar_width = 250
+    sidebar = tk.Frame(win, bd=2, relief="groove", bg="#f0f0f0")
+    sidebar.place(x=10, y=60, width=sidebar_width, height=520)
+    sidebar.pack_propagate(False)
+
+    ttk.Label(sidebar, text="Tools", font=("Arial", 12, "bold")).pack(pady=10)
+
+    # Main Area
+    main_area_width = 1000 - sidebar_width - 30  
+    main_area = tk.Frame(win, bd=2, relief="groove", bg="white")
+    main_area.place(x=sidebar_width + 20, y=60, width=main_area_width, height=520)
+    main_area.pack_propagate(False)
+
+    # Buttons
+    tk.Button(sidebar, text="Manage Users", width=25, command=manage_users).pack(pady=8)
+    tk.Button(sidebar, text="Backup Database", width=25, command=backup_database).pack(pady=8)
+    tk.Button(sidebar, text="Execute Queries", width=25, command=execute_queries).pack(pady=8)
+    tk.Button(sidebar, text="Logout", width=20, command=win.destroy).pack(pady=5)
+
+    win.mainloop()
+
+# ---------------- Manage Users ----------------
+def manage_users():
+    user_win = tk.Toplevel()
+    user_win.title("Manage Oracle Users")
+    user_win.geometry("400x300")
+
+    tk.Label(user_win, text="Username:").pack(pady=5)
+    username_entry = tk.Entry(user_win)
+    username_entry.pack()
+
+    tk.Label(user_win, text="Password:").pack(pady=5)
+    password_entry = tk.Entry(user_win, show='*')
+    password_entry.pack()
+
+    tk.Label(user_win, text="Select Role:").pack(pady=5)
+    role_var = tk.StringVar()
+    role_dropdown = ttk.Combobox(user_win, textvariable=role_var, state="readonly")
+    role_dropdown['values'] = ("HR", "DBA", "ACCOUNTANT", "EMPLOYEE")
+    role_dropdown.pack()
+
+# ---------------- Create users ----------------
+    def create_user():
+        username = username_entry.get().strip()
+        password = password_entry.get().strip()
+        role = role_var.get().strip()
+
+        if not username or not password:
+            messagebox.showwarning("Input Error", "Username and password are required.")
+            return
+
+        conn = connect_db()  # This must connect to a PDB, not CDB$ROOT
+        if conn:
+            try:
+                cursor = conn.cursor()
+                # Wrap username and password in double quotes to preserve case and avoid reserved word issues
+                cursor.execute(f'CREATE USER "{username}" IDENTIFIED BY "{password}"')
+                cursor.execute(f'GRANT CONNECT TO "{username}"')
+                if role:
+                    try:
+                        cursor.execute(f'GRANT {role} TO "{username}"')
+                    except:
+                        messagebox.showwarning("Role Error", f"Role '{role}' not found.")
+                conn.commit()
+                messagebox.showinfo("Success", f"User '{username}' created with role '{role}'.")
+            except oracledb.DatabaseError as e:
+                messagebox.showerror("Error", str(e))
+            finally:
+                conn.close()
+
+    def drop_user():
+        username = username_entry.get().strip()
+        if not username:
+            messagebox.showwarning("Input Error", "Please enter a username to drop.")
+            return
+
+        conn = connect_db()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute(f'DROP USER "{username}" CASCADE')
+                conn.commit()
+                messagebox.showinfo("Success", f"User '{username}' dropped.")
+            except oracledb.DatabaseError as e:
+                messagebox.showerror("Error", str(e))
+            finally:
+                conn.close()
+
+    tk.Button(user_win, text="Create User", command=create_user).pack(pady=10)
+    tk.Button(user_win, text="Drop User", command=drop_user).pack(pady=5)
+
+# ---------------- Backup Database ----------------
+def backup_database():
+    """
+    Creates a backup of the entire Oracle database using Data Pump.
+    Prompts the user to choose a save location for the .dmp file.
+    """
+    # Ask user where to save the backup file
+    file_path = filedialog.asksaveasfilename(
+        defaultextension=".dmp",
+        filetypes=[("Oracle Dump Files", "*.dmp")],
+        title="Save Backup File As"
+    )
+
+    # If user cancels the file dialog
+    if not file_path:
+        return
+
+    # Extract just the filename from full path
+    dump_file = os.path.basename(file_path)
+
+    # Hardcoded Oracle credentials and Data Pump directory
+    oracle_user = "system"
+    oracle_password = "YourPasswordHere"  # <-- Replace this with your actual password
+    oracle_connect = "localhost/orclpdb"  # Change if your DB uses a different service name
+    data_pump_dir = "DATA_PUMP_DIR"       # This must be pre-created and granted in Oracle
+
+    # Construct the expdp command
+    command = (
+        f'expdp {oracle_user}/{oracle_password}@{oracle_connect} '
+        f'full=y directory={data_pump_dir} dumpfile={dump_file} logfile=backup.log'
+    )
+
+    try:
+        # Execute the backup command
+        os.system(command)
+        messagebox.showinfo(
+            "Backup Started",
+            f"Database backup started using Data Pump.\n\nDump File: {dump_file}\n"
+            "Check Oracle log files or Enterprise Manager for progress."
+        )
+    except Exception as e:
+        messagebox.showerror("Backup Error", f"An error occurred while starting the backup:\n{str(e)}")
+
+# ---------------- Execute Queries ----------------
+def execute_queries():
+    """
+    Allows the DBA to enter and execute custom SQL queries via a larger textbox UI.
+    SELECT results are shown in a popup; others commit changes silently.
+    """
+    query_window = tk.Toplevel(root)
+    query_window.title("Execute SQL Query")
+    query_window.geometry("800x400")
+
+    tk.Label(query_window, text="Enter your SQL query below:", font=("Arial", 12)).pack(pady=5)
+
+    query_input = ScrolledText(query_window, width=100, height=15, font=("Courier", 10))
+    query_input.pack(padx=10, pady=10, fill="both", expand=True)
+
+    def run_query():
+        query = query_input.get("1.0", tk.END).strip()
+        if not query:
+            messagebox.showwarning("Empty Query", "Please enter a SQL query to execute.")
+            return
+
+        conn = connect_db()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute(query)
+
+                if query.lower().startswith("select"):
+                    results = cursor.fetchall()
+                    col_names = [desc[0] for desc in cursor.description]
+                    output = "\t".join(col_names) + "\n"
+                    output += "\n".join("\t".join(str(cell) for cell in row) for row in results)
+
+                    result_win = tk.Toplevel(query_window)
+                    result_win.title("Query Results")
+                    text = ScrolledText(result_win, width=100, height=30, font=("Courier", 10))
+                    text.pack(fill="both", expand=True)
+                    text.insert(tk.END, output)
+                else:
+                    conn.commit()
+                    messagebox.showinfo("Success", "Query executed successfully.")
+
+            except oracledb.DatabaseError as e:
+                messagebox.showerror("Execution Error", str(e))
+            finally:
+                conn.close()
+
+    tk.Button(query_window, text="Execute", command=run_query, font=("Arial", 12)).pack(pady=5)
+
+# ---------------- Main Login Screen ----------------
+root = tk.Tk()
+root.title("Government Payroll System - Login")
+root.resizable(True, True)
+root.eval('tk::PlaceWindow . center')
+
+tk.Label(root, text="Government Payroll Management System", font=("Arial", 28, "bold")).pack(pady=10)
+tk.Label(root, text="Login", font=("Arial", 18, "bold")).pack(pady=10)
+
+form_frame = tk.Frame(root)
+form_frame.pack(pady=10)
+
+tk.Label(form_frame, text="Username:", font=("Arial", 12)).grid(row=0, column=0, sticky="e", pady=5, padx=10)
+username_entry = tk.Entry(form_frame, font=("Arial", 12), width=25)
+username_entry.grid(row=0, column=1, pady=5)
+
+tk.Label(form_frame, text="Password:", font=("Arial", 12)).grid(row=1, column=0, sticky="e", pady=5, padx=10)
+password_entry = tk.Entry(form_frame, show="*", font=("Arial", 12), width=25)
+password_entry.grid(row=1, column=1, pady=5)
+
+tk.Label(form_frame, text="Role:", font=("Arial", 12)).grid(row=2, column=0, sticky="e", pady=5, padx=10)
+role_var = tk.StringVar(value="Select Role")
+role_menu = ttk.Combobox(form_frame, textvariable=role_var, state="readonly", font=("Arial", 12), width=23)
+role_menu['values'] = ["HR Manager", "Accountant", "Employee", "DBA"]
+role_menu.grid(row=2, column=1, pady=5)
+
+tk.Button(root, text="Login", font=("Arial", 12), width=20, command=login).pack(pady=10)
+
+tk.Button(root, text="Forgot Password?", font=("Arial", 10, "underline"), fg="blue", bd=0,
+          command=forgot_password).pack()
+
+root.mainloop()

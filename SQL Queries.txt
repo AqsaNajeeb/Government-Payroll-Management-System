@@ -1,0 +1,1594 @@
+CREATE TABLE DEPARTMENT_T (
+  Dep_ID NUMBER PRIMARY KEY,
+  DepName VARCHAR2(100),
+  DepHead VARCHAR2(100)
+);
+INSERT INTO DEPARTMENT_T (Dep_ID, DepName, DepHead) VALUES (101, 'Network Operations', 'Engr. Ahmed Raza');
+INSERT INTO DEPARTMENT_T (Dep_ID, DepName, DepHead) VALUES (102, 'Cybersecurity', 'Ms. Fatima Khalid');
+INSERT INTO DEPARTMENT_T (Dep_ID, DepName, DepHead) VALUES (103, 'Software Development', 'Mr. Bilal Hussain');
+INSERT INTO DEPARTMENT_T (Dep_ID, DepName, DepHead) VALUES (104, 'Human Resources', 'Ms. Hira Qureshi');
+INSERT INTO DEPARTMENT_T (Dep_ID, DepName, DepHead) VALUES (105, 'Cloud Services', 'Engr. Usman Tariq');
+SELECT * FROM DEPARTMENT_T;
+COMMIT;
+
+
+CREATE TABLE PAYGRADE_T (
+  Grade_ID NUMBER PRIMARY KEY,
+  GradeName VARCHAR2(100),
+  BasicSalary NUMBER,
+  DearnessAllowance NUMBER,
+  GradeBonus NUMBER,
+  ProvidentFund NUMBER,
+  BPS NUMBER
+);
+INSERT INTO PAYGRADE_T (Grade_ID, GradeName, BasicSalary, DearnessAllowance, GradeBonus, ProvidentFund, BPS) VALUES (201, 'Cloud Engineer', 60000, 5000, 3000, 5000, 16);
+INSERT INTO PAYGRADE_T (Grade_ID, GradeName, BasicSalary, DearnessAllowance, GradeBonus, ProvidentFund, BPS) VALUES (202, 'Network Engineer', 75000, 7000, 5000, 6000, 17);
+INSERT INTO PAYGRADE_T (Grade_ID, GradeName, BasicSalary, DearnessAllowance, GradeBonus, ProvidentFund, BPS) VALUES (203, 'Senior Developer', 120000, 10000, 10000, 8000, 18);
+INSERT INTO PAYGRADE_T (Grade_ID, GradeName, BasicSalary, DearnessAllowance, GradeBonus, ProvidentFund, BPS) VALUES (204, 'Cybersecurity Analyst', 110000, 9500, 9000, 8500, 18);
+INSERT INTO PAYGRADE_T (Grade_ID, GradeName, BasicSalary, DearnessAllowance, GradeBonus, ProvidentFund, BPS) VALUES (205, 'HR Manager', 180000, 12000, 15000, 10000, 19);
+SELECT * FROM PAYGRADE_T;
+COMMIT;
+
+CREATE SEQUENCE TAX_SEQ START WITH 1 INCREMENT BY 1;
+
+CREATE TABLE LEAVE_T (
+  Leave_ID NUMBER PRIMARY KEY,
+  Emp_ID NUMBER,
+  LeaveType_ID NUMBER,
+  StartDate DATE,
+  EndDate DATE,
+  NumberOfDays NUMBER,
+  LeaveStatus VARCHAR2(20),
+  LeaveReason VARCHAR2(200),
+  CONSTRAINT FK_Leave_Emp FOREIGN KEY (Emp_ID) REFERENCES EMPLOYEE_T(Emp_ID),
+  CONSTRAINT FK_Leave_Type FOREIGN KEY (LeaveType_ID) REFERENCES LEAVETYPE_T(LeaveType_ID)
+);
+ALTER TABLE LEAVE_T DROP COLUMN NumberOfDays;
+
+INSERT INTO LEAVE_T (Leave_ID, Emp_ID, LeaveType_ID, StartDate, LeaveStatus, LeaveReason) 
+VALUES (1, 991234, 232, TO_DATE('2025-05-01', 'YYYY-MM-DD'), 'Approved', 'Personal reasons');
+INSERT INTO LEAVE_T (Leave_ID, Emp_ID, LeaveType_ID, StartDate, LeaveStatus, LeaveReason)
+VALUES (2, 991235, 138, TO_DATE('2025-05-10', 'YYYY-MM-DD'), 'Pending', 'Medical treatment');
+INSERT INTO LEAVE_T (Leave_ID, Emp_ID, LeaveType_ID, StartDate, LeaveStatus, LeaveReason)
+VALUES (3, 991237, 423, TO_DATE('2025-05-15', 'YYYY-MM-DD'), 'Approved', 'Family emergency');
+INSERT INTO LEAVE_T (Leave_ID, Emp_ID, LeaveType_ID, StartDate, LeaveStatus, LeaveReason)
+VALUES (4, 991236, 652, TO_DATE('2025-05-20', 'YYYY-MM-DD'), 'Approved', 'Vacation');
+INSERT INTO LEAVE_T (Leave_ID, Emp_ID, LeaveType_ID, StartDate, LeaveStatus, LeaveReason)
+VALUES (5, 991238, 110, TO_DATE('2025-05-25', 'YYYY-MM-DD'), 'Pending', 'Marriage');
+SELECT * FROM LEAVE_T;
+COMMIT;
+
+SELECT Leave_ID, Emp_ID, LeaveType_ID, StartDate, EndDate, LeaveStatus, LeaveReason
+FROM LEAVE_T;
+
+
+CREATE TRIGGER trg_set_enddate_based_on_maxdays
+BEFORE INSERT ON LEAVE_T
+FOR EACH ROW
+DECLARE
+  v_max_days LEAVETYPE_T.MaxDays%TYPE;
+BEGIN
+  -- Get MaxDays from LEAVETYPE_T
+  SELECT MaxDays INTO v_max_days
+  FROM LEAVETYPE_T
+  WHERE LeaveType_ID = :NEW.LeaveType_ID;
+
+  -- Calculate EndDate based on StartDate + MaxDays - 1
+  :NEW.EndDate := :NEW.StartDate + (v_max_days - 1);
+END;
+/
+CREATE SEQUENCE LEAVE_SEQ START WITH 1 INCREMENT BY 1;
+
+
+
+CREATE TABLE LEAVETYPE_T (
+  LeaveType_ID NUMBER PRIMARY KEY,
+  MaxDays NUMBER,
+  TypeName VARCHAR2(50),
+  WithPay VARCHAR2(3),
+  Description VARCHAR2(200)
+);
+INSERT INTO LEAVETYPE_T (LeaveType_ID, MaxDays, TypeName, WithPay, Description)
+VALUES (652, 14, 'Annual Leave', 'Yes', 'Paid annual leave granted.');
+INSERT INTO LEAVETYPE_T (LeaveType_ID, MaxDays, TypeName, WithPay, Description)
+VALUES (138, 10, 'Medical Leave', 'Yes', 'Leave for medical reasons, including sickness/hospitalization.');
+INSERT INTO LEAVETYPE_T (LeaveType_ID, MaxDays, TypeName, WithPay, Description)
+VALUES (232, 5, 'Conference Leave', 'No', 'Leave granted to attend professional IT events.');
+INSERT INTO LEAVETYPE_T (LeaveType_ID, MaxDays, TypeName, WithPay, Description)
+VALUES (110, 15, 'Marriage Leave', 'Yes', 'Leave for own wedding.');
+INSERT INTO LEAVETYPE_T (LeaveType_ID, MaxDays, TypeName, WithPay, Description)
+VALUES (423, 3, 'Casual Leave', 'No', 'Short leave for urgent personal matters.');
+DESC LEAVETYPE_T;
+SELECT * FROM LEAVETYPE_T;
+
+
+CREATE TABLE EMPLOYEE_T (
+  Emp_ID NUMBER PRIMARY KEY,
+  Grade_ID NUMBER,
+  Dep_ID NUMBER,
+  Leave_ID NUMBER,
+  Emp_Name VARCHAR2(100),
+  DOB DATE,
+  DOJ DATE,
+  City VARCHAR2(50),
+  State VARCHAR2(50),
+  Contact VARCHAR2(20),
+  Designation VARCHAR2(50),
+  ResidencyStatus VARCHAR2(20),
+  CNIC VARCHAR2(20),
+  Gender VARCHAR2(10),
+  MaritalStatus VARCHAR2(20),
+  Email VARCHAR2(100),
+  BankAccNumber VARCHAR2(30),
+  isActive CHAR(1),
+  CONSTRAINT FK_Employee_Grade FOREIGN KEY (Grade_ID) REFERENCES PAYGRADE_T(Grade_ID),
+  CONSTRAINT FK_Employee_Dep FOREIGN KEY (Dep_ID) REFERENCES DEPARTMENT_T(Dep_ID)
+);
+INSERT INTO EMPLOYEE_T (Emp_ID, Grade_ID, Dep_ID, Emp_Name, DOB, DOJ, City, State, Contact, Designation, ResidencyStatus, CNIC, Gender, MaritalStatus, Email, BankAccNumber, isActive)
+VALUES (991234, 201, 105, 'Usman Tariq', TO_DATE('1992-03-15', 'YYYY-MM-DD'), TO_DATE('2020-07-01', 'YYYY-MM-DD'), 'Lahore', 'Pakistan', '03211234567', 'Cloud Engineer', 'Resident', 3520198765432, 'Male', 'Single','usman.tariq@10pearls.com', 'PK36HBL01234567890123', 'Yes');
+INSERT INTO EMPLOYEE_T (Emp_ID, Grade_ID, Dep_ID, Emp_Name, DOB, DOJ, City, State, Contact, Designation, ResidencyStatus, CNIC, Gender, MaritalStatus, Email, BankAccNumber, isActive)
+VALUES (991235, 202, 101, 'Ahmed Raza', TO_DATE('1990-06-10', 'YYYY-MM-DD'), TO_DATE('2018-11-23', 'YYYY-MM-DD'), 'Lahore', 'Pakistan', '03019876543', 'Network Engineer', 'Resident', 3520112345678, 'Male', 'Married', 'ahmed.raza@techhub.pk', 'PK92MEZN12345678901234', 'Yes');
+INSERT INTO EMPLOYEE_T (Emp_ID, Grade_ID, Dep_ID, Emp_Name, DOB, DOJ, City, State, Contact, Designation, ResidencyStatus, CNIC, Gender, MaritalStatus, Email, BankAccNumber, isActive)
+VALUES (991236, 203, 103, 'Bilal Hussain', TO_DATE('1988-12-05', 'YYYY-MM-DD'), TO_DATE('2015-03-01', 'YYYY-MM-DD'), 'Karachi', 'Pakistan', '03151112233', 'Senior Developer', 'Resident', 4210112233445, 'Male', 'Married', 'bilal.ahmed@venturedive.com', 'PK73NBPA01234567890123', 'Yes');
+INSERT INTO EMPLOYEE_T (Emp_ID, Grade_ID, Dep_ID, Emp_Name, DOB, DOJ, City, State, Contact, Designation, ResidencyStatus, CNIC, Gender, MaritalStatus, Email, BankAccNumber, isActive)
+VALUES (991237, 204, 102, 'Fatima Khalid', TO_DATE('1995-09-22', 'YYYY-MM-DD'), TO_DATE('2021-02-14', 'YYYY-MM-DD'), 'Islamabad', 'Pakistan', '03462233445', 'Cybersecurity Analyst', 'Non-Resident', 6110212345671, 'Female', 'Single', 'fatima.khalid@systemsltd.com', 'PK85UBL00000011223344', 'Yes');
+INSERT INTO EMPLOYEE_T (Emp_ID, Grade_ID, Dep_ID, Emp_Name, DOB, DOJ, City, State, Contact, Designation, ResidencyStatus, CNIC, Gender, MaritalStatus, Email, BankAccNumber, isActive)
+VALUES (991238, 205, 104, 'Hira Qureshi', TO_DATE('1993-01-30', 'YYYY-MM-DD'), TO_DATE('2022-06-01', 'YYYY-MM-DD'), 'Peshawar', 'Pakistan', '03131234567', 'HR Manager', 'Resident', 1610112233445, 'Female', 'Single', 'hira.qureshi@afiniti.com', 'PK44FAYS00000009876543', 'Yes');
+SELECT * FROM EMPLOYEE_T;
+
+ALTER TABLE EMPLOYEE_T MODIFY isActive VARCHAR2(3);
+
+ALTER TABLE EMPLOYEE_T
+ADD CONSTRAINT FK_Employee_Leave 
+FOREIGN KEY (Leave_ID) REFERENCES LEAVE_T(Leave_ID);
+
+ALTER TABLE EMPLOYEE_T 
+DROP CONSTRAINT FK_Employee_Leave;
+ALTER TABLE EMPLOYEE_T 
+DROP COLUMN Leave_ID;
+
+ALTER TABLE EMPLOYEE_T 
+MODIFY CNIC NUMBER(13);
+
+ALTER TABLE EMPLOYEE_T 
+ADD CONSTRAINT CHK_ResidencyStatus 
+CHECK (ResidencyStatus IN ('Resident', 'Non-Resident'));
+
+ALTER TABLE EMPLOYEE_T 
+ADD CONSTRAINT CHK_Gender 
+CHECK (Gender IN ('Male', 'Female'));
+
+ALTER TABLE EMPLOYEE_T 
+ADD CONSTRAINT CHK_MaritalStatus 
+CHECK (MaritalStatus IN ('Single', 'Married', 'Divorced', 'Widowed'));
+
+ALTER TABLE EMPLOYEE_T 
+ADD CONSTRAINT CHK_isActive 
+CHECK (isActive IN ('Yes', 'No'));
+ALTER TABLE EMPLOYEE_T 
+DROP CONSTRAINT CHK_isActive;
+
+CREATE TABLE BONUS_T (
+  Bonus_ID NUMBER PRIMARY KEY,
+  Emp_ID NUMBER,
+  BonusType VARCHAR2(50),
+  Amount NUMBER,
+  BonusPercentage NUMBER,
+  BonusDate DATE,
+  PaymentStatus VARCHAR2(20) CHECK (PaymentStatus IN ('Paid', 'Pending', 'Approved')),
+  BonusPeriod VARCHAR2(20),
+  CONSTRAINT FK_Bonus_Emp FOREIGN KEY (Emp_ID) REFERENCES EMPLOYEE_T(Emp_ID)
+);
+ALTER TABLE BONUS_T DROP COLUMN BonusPercentage;
+
+INSERT INTO BONUS_T (Bonus_ID, Emp_ID, BonusType, Amount, BonusPercentage, BonusDate, PaymentStatus, BonusPeriod) VALUES (2006, 991234, 'Performance Bonus', 15000, 7.5, TO_DATE('2025-04-01', 'YYYY-MM-DD'), 'Approved', 'Q1-2025');
+INSERT INTO BONUS_T (Bonus_ID, Emp_ID, BonusType, Amount, BonusPercentage, BonusDate, PaymentStatus, BonusPeriod) VALUES (2007, 991235, 'End-Year Bonus', 25000, 10, TO_DATE('2025-01-01', 'YYYY-MM-DD'), 'Paid', '2024');
+INSERT INTO BONUS_T (Bonus_ID, Emp_ID, BonusType, Amount, BonusPercentage, BonusDate, PaymentStatus, BonusPeriod) VALUES (2008, 991236, 'Referral Bonus', 10000, 5, TO_DATE('2025-03-10', 'YYYY-MM-DD'), 'Pending', 'Q1-2025');
+INSERT INTO BONUS_T (Bonus_ID, Emp_ID, BonusType, Amount, BonusPercentage, BonusDate, PaymentStatus, BonusPeriod) VALUES (2009, 991237, 'Performance Bonus', 18000, 8, TO_DATE('2025-02-01', 'YYYY-MM-DD'), 'Approved', 'Q1-2025');
+INSERT INTO BONUS_T (Bonus_ID, Emp_ID, BonusType, Amount, BonusPercentage, BonusDate, PaymentStatus, BonusPeriod) VALUES (2005, 991238, 'Special Achievement Bonus', 30000, 20, TO_DATE('2025-05-05', 'YYYY-MM-DD'), 'Approved', 'Q2-2025');
+SELECT * FROM BONUS_T;
+
+
+
+CREATE TABLE TAX_T (
+  Tax_ID NUMBER PRIMARY KEY,
+  Emp_ID NUMBER,
+  Grade_ID NUMBER,
+  TaxPercentage NUMBER,
+  TaxAmount NUMBER,
+  TaxYear VARCHAR2(20),
+  CONSTRAINT FK_Tax_Emp FOREIGN KEY (Emp_ID) REFERENCES EMPLOYEE_T(Emp_ID),
+  CONSTRAINT FK_Tax_Grade FOREIGN KEY (Grade_ID) REFERENCES PAYGRADE_T(Grade_ID)
+);
+DELETE FROM RECORDS_T
+WHERE Transaction_ID IN (
+  SELECT Transaction_ID FROM PAYROLL_T WHERE Tax_ID = 3001
+);
+ROllBACK;
+
+DELETE FROM DEDUCTIONS_T
+WHERE Transaction_ID IN (
+  SELECT Transaction_ID FROM PAYROLL_T WHERE Tax_ID = 3001
+);
+ROllBACK;
+
+DELETE FROM PAYROLL_T
+WHERE Tax_ID = 3001;
+DELETE FROM TAX_T WHERE Tax_ID = 3001;
+
+-- Step 1: Update PAYROLL_T to use correct Tax_ID
+UPDATE PAYROLL_T
+SET Tax_ID = 3006
+WHERE Tax_ID = 3001 AND Emp_ID = 991234;
+
+
+SELECT Tax_ID, Emp_ID FROM PAYROLL_T WHERE Tax_ID = 3001;
+
+
+ALTER TABLE TAX_T DROP COLUMN TaxPercentage;
+ALTER TABLE TAX_T DROP COLUMN TaxAmount;
+ALTER TABLE TAX_T ADD (TaxAmount NUMBER);
+ALTER TABLE TAX_T ADD (TaxMonth VARCHAR2(20));
+SELECT * FROM TAX_T;
+
+
+
+CREATE TABLE LOAN_T (
+  Loan_ID NUMBER PRIMARY KEY,
+  Emp_ID NUMBER,
+  LoanType VARCHAR2(50),
+  LoanAmount NUMBER,
+  Installments NUMBER,
+  RemainingBalance NUMBER,
+  InstallmentAmount NUMBER,
+  LoanStatus VARCHAR2(20),
+  LoanPaymentDate DATE,
+  CONSTRAINT FK_Loan_Emp FOREIGN KEY (Emp_ID) REFERENCES EMPLOYEE_T(Emp_ID)
+);
+INSERT INTO LOAN_T (Loan_ID, Emp_ID, LoanType, LoanAmount, Installments, RemainingBalance, InstallmentAmount, LoanStatus, LoanPaymentDate) VALUES (4001, 991234, 'Personal Loan', 50000, 12, 35000, 4166.67, 'Approved', TO_DATE('2025-05-01', 'YYYY-MM-DD'));
+INSERT INTO LOAN_T (Loan_ID, Emp_ID, LoanType, LoanAmount, Installments, RemainingBalance, InstallmentAmount, LoanStatus, LoanPaymentDate) VALUES (4002, 991235, 'Home Loan', 300000, 24, 250000, 12500, 'Pending', TO_DATE('2025-06-01', 'YYYY-MM-DD'));
+INSERT INTO LOAN_T (Loan_ID, Emp_ID, LoanType, LoanAmount, Installments, RemainingBalance, InstallmentAmount, LoanStatus, LoanPaymentDate) VALUES (4003, 991236, 'Education Loan', 150000, 10, 100000, 15000, 'Approved', TO_DATE('2025-04-10', 'YYYY-MM-DD'));
+INSERT INTO LOAN_T (Loan_ID, Emp_ID, LoanType, LoanAmount, Installments, RemainingBalance, InstallmentAmount, LoanStatus, LoanPaymentDate) VALUES (4004, 991237, 'Car Loan', 200000, 20, 180000, 10000, 'Approved', TO_DATE('2025-05-15', 'YYYY-MM-DD'));
+INSERT INTO LOAN_T (Loan_ID, Emp_ID, LoanType, LoanAmount, Installments, RemainingBalance, InstallmentAmount, LoanStatus, LoanPaymentDate) VALUES (4005, 991238, 'Personal Loan', 75000, 15, 50000, 5000, 'Pending', TO_DATE('2025-07-01', 'YYYY-MM-DD'));
+SELECT * FROM LOAN_T;
+
+
+
+CREATE TABLE BANKACCOUNT_T (
+  BankAccount_ID NUMBER PRIMARY KEY,
+  Emp_ID NUMBER,
+  AccountNumber NUMBER(20),
+  BankName VARCHAR2(100),
+  BranchName VARCHAR2(100),
+  BranchCode NUMBER(4),
+  IBAN VARCHAR2(30),
+  CONSTRAINT FK_Bank_Emp FOREIGN KEY (Emp_ID) REFERENCES EMPLOYEE_T(Emp_ID)
+);
+INSERT INTO BANKACCOUNT_T (BankAccount_ID, Emp_ID, AccountNumber, BankName, BranchName, BranchCode, IBAN) VALUES (5001, 991234, 12345678901234567890, 'Habib Bank Limited', 'Lahore Main', 1010, 'PK36HBL01234567890123');
+INSERT INTO BANKACCOUNT_T (BankAccount_ID, Emp_ID, AccountNumber, BankName, BranchName, BranchCode, IBAN) VALUES (5002, 991235, 98765432109876543210, 'Meezan Bank', 'Karachi Branch', 2020, 'PK92MEZN12345678901234');
+INSERT INTO BANKACCOUNT_T (BankAccount_ID, Emp_ID, AccountNumber, BankName, BranchName, BranchCode, IBAN) VALUES (5003, 991236, 11223344556677889900, 'National Bank of Pakistan', 'Islamabad Branch', 3030, 'PK73NBPA01234567890123');
+INSERT INTO BANKACCOUNT_T (BankAccount_ID, Emp_ID, AccountNumber, BankName, BranchName, BranchCode, IBAN) VALUES (5004, 991237, 22334455667788990011, 'United Bank Limited', 'Rawalpindi Branch', 4040, 'PK85UBL00000011223344');
+INSERT INTO BANKACCOUNT_T (BankAccount_ID, Emp_ID, AccountNumber, BankName, BranchName, BranchCode, IBAN) VALUES (5005, 991238, 33445566778899001122, 'Faysal Bank', 'Multan Branch', 5050, 'PK44FAYS00000009876543');
+SELECT * FROM BANKACCOUNT_T;
+
+
+
+
+CREATE TABLE PAYROLL_T (
+  Transaction_ID NUMBER PRIMARY KEY,
+  Emp_ID NUMBER,
+  Grade_ID NUMBER,
+  Attendance_ID NUMBER,
+  Tax_ID NUMBER,
+  Bonus_ID NUMBER,
+  BankAccount_ID NUMBER,
+  GrossSalary NUMBER,
+  NetSalary NUMBER,
+  SalaryMonth VARCHAR2(20),
+  SalaryYear NUMBER(4),
+  LeaveDays NUMBER(5),
+  TotalDeduction NUMBER,
+  PaymentStatus VARCHAR2(20),
+  CONSTRAINT FK_Payroll_Emp FOREIGN KEY (Emp_ID) REFERENCES EMPLOYEE_T(Emp_ID),
+  CONSTRAINT FK_Payroll_Grade FOREIGN KEY (Grade_ID) REFERENCES PAYGRADE_T(Grade_ID),
+  CONSTRAINT FK_Payroll_Tax FOREIGN KEY (Tax_ID) REFERENCES TAX_T(Tax_ID),
+  CONSTRAINT FK_Payroll_Attendance FOREIGN KEY (Attendance_ID) REFERENCES ATTENDANCE_T(Attendance_ID),
+  CONSTRAINT FK_Payroll_Bonus FOREIGN KEY (Bonus_ID) REFERENCES BONUS_T(Bonus_ID),
+  CONSTRAINT FK_Payroll_Bank FOREIGN KEY (BankAccount_ID) REFERENCES BANKACCOUNT_T(BankAccount_ID)
+);
+ALTER TABLE PAYROLL_T DROP COLUMN GrossSalary;
+ALTER TABLE PAYROLL_T DROP COLUMN NetSalary;
+ALTER TABLE PAYROLL_T DROP COLUMN SalaryYear;
+ALTER TABLE PAYROLL_T DROP COLUMN LeaveDays;
+ALTER TABLE PAYROLL_T ADD SalaryYear NUMBER;
+
+UPDATE PAYROLL_T p
+SET 
+    p.SALARYMONTH = (
+        SELECT t.TaxMonth
+        FROM TAX_T t
+        WHERE t.Emp_ID = p.Emp_ID
+        AND ROWNUM = 1
+    ),
+    p.SALARYYEAR = (
+        SELECT t.TaxYear
+        FROM TAX_T t
+        WHERE t.Emp_ID = p.Emp_ID
+        AND ROWNUM = 1
+    )
+WHERE EXISTS (
+    SELECT 1 FROM TAX_T t WHERE t.Emp_ID = p.Emp_ID
+);
+
+ALTER TABLE PAYROLL_T
+ADD (NETSALARY NUMBER, GROSSSALARY NUMBER);
+
+
+
+INSERT INTO PAYROLL_T (Transaction_ID, Emp_ID, Grade_ID, Attendance_ID, Tax_ID, Bonus_ID, BankAccount_ID, GrossSalary, NetSalary, SalaryMonth, SalaryYear, LeaveDays, TotalDeduction, PaymentStatus) 
+VALUES (91, 991234, 201, 8001, 3001, 2006, 5001, 50000, 45000, 'April', 2025, 2, 5000, 'Paid');
+INSERT INTO PAYROLL_T (Transaction_ID, Emp_ID, Grade_ID, Attendance_ID, Tax_ID, Bonus_ID, BankAccount_ID, GrossSalary, NetSalary, SalaryMonth, SalaryYear, LeaveDays, TotalDeduction, PaymentStatus) 
+VALUES (92, 991235, 202, 8002, 3002, 2007, 5002, 55000, 49500, 'April', 2025, 3, 5500, 'Pending');
+INSERT INTO PAYROLL_T (Transaction_ID, Emp_ID, Grade_ID, Attendance_ID, Tax_ID, Bonus_ID, BankAccount_ID, GrossSalary, NetSalary, SalaryMonth, SalaryYear, LeaveDays, TotalDeduction, PaymentStatus) 
+VALUES (93, 991236, 203, 8003, 3003, 2008, 5003, 60000, 54000, 'March', 2025, 6, 6000, 'Paid');
+INSERT INTO PAYROLL_T (Transaction_ID, Emp_ID, Grade_ID, Attendance_ID, Tax_ID, Bonus_ID, BankAccount_ID, GrossSalary, NetSalary, SalaryMonth, SalaryYear, LeaveDays, TotalDeduction, PaymentStatus) 
+VALUES (94, 991237, 204, 8004, 3004, 2009, 5004, 58000, 52200, 'February', 2025, 3, 5800, 'Paid');
+INSERT INTO PAYROLL_T (Transaction_ID, Emp_ID, Grade_ID, Attendance_ID, Tax_ID, Bonus_ID, BankAccount_ID, GrossSalary, NetSalary, SalaryMonth, SalaryYear, LeaveDays, TotalDeduction, PaymentStatus) 
+VALUES (95, 991238, 205, 8005, 3005, 2005, 5005, 52000, 46800, 'January', 2025, 2, 5200, 'Pending');
+SELECT * FROM PAYROLL_T;
+
+DESCRIBE FINAL_PAYROLL_VIEW;
+
+
+
+CREATE TABLE FUND_T (
+  Fund_ID NUMBER PRIMARY KEY,
+  Emp_ID NUMBER,
+  Transaction_ID NUMBER,
+  FundType VARCHAR2(50),
+  Amount NUMBER,
+  FundDate DATE,
+  GPF_Balance NUMBER,
+  FundStatus VARCHAR2(20),
+  Purpose VARCHAR2(100),
+  CONSTRAINT FK_Fund_Emp FOREIGN KEY (Emp_ID) REFERENCES EMPLOYEE_T(Emp_ID),
+  CONSTRAINT FK_Fund_Transaction FOREIGN KEY (Transaction_ID) REFERENCES PAYROLL_T(Transaction_ID)
+);
+INSERT INTO FUND_T (Fund_ID, Emp_ID, Transaction_ID, FundType, Amount, FundDate, GPF_Balance, FundStatus, Purpose) VALUES (789, 991234, 91, 'GPF', 5000, TO_DATE('2025-04-10', 'YYYY-MM-DD'), 20000, 'Approved', 'Retirement Savings');
+INSERT INTO FUND_T (Fund_ID, Emp_ID, Transaction_ID, FundType, Amount, FundDate, GPF_Balance, FundStatus, Purpose) VALUES (790, 991235, 92, 'EPF', 4500, TO_DATE('2025-04-11', 'YYYY-MM-DD'), 18000, 'Pending', 'Medical Expenses');
+INSERT INTO FUND_T (Fund_ID, Emp_ID, Transaction_ID, FundType, Amount, FundDate, GPF_Balance, FundStatus, Purpose) VALUES (791, 991236, 93, 'GPF', 4000, TO_DATE('2025-03-15', 'YYYY-MM-DD'), 15000, 'Approved', 'Home Renovation');
+INSERT INTO FUND_T (Fund_ID, Emp_ID, Transaction_ID, FundType, Amount, FundDate, GPF_Balance, FundStatus, Purpose) VALUES (792, 991237, 94, 'EPF', 6000, TO_DATE('2025-02-20', 'YYYY-MM-DD'), 17000, 'Approved', 'Emergency Funds');
+INSERT INTO FUND_T (Fund_ID, Emp_ID, Transaction_ID, FundType, Amount, FundDate, GPF_Balance, FundStatus, Purpose) VALUES (793, 991238, 95, 'GPF', 5200, TO_DATE('2025-01-25', 'YYYY-MM-DD'), 19000, 'Pending', 'Child Education');
+SELECT * FROM FUND_T;
+
+
+
+CREATE TABLE ATTENDANCE_T (
+  Attendance_ID NUMBER PRIMARY KEY,
+  Emp_ID NUMBER,
+  Dep_ID NUMBER,
+  LeaveType_ID NUMBER,
+  AttendanceDate DATE,
+  Time VARCHAR2(10), 
+  Status VARCHAR2(20), 
+  HoursWorked NUMBER(4,2),
+  CONSTRAINT FK_Attendance_Emp FOREIGN KEY (Emp_ID) REFERENCES EMPLOYEE_T(Emp_ID),
+  CONSTRAINT FK_Attendance_Dep FOREIGN KEY (Dep_ID) REFERENCES DEPARTMENT_T(Dep_ID),
+  CONSTRAINT FK_Attendance_LeaveType FOREIGN KEY (LeaveType_ID) REFERENCES LEAVETYPE_T(LeaveType_ID)
+);
+INSERT INTO ATTENDANCE_T (Attendance_ID, Emp_ID, Dep_ID, LeaveType_ID, AttendanceDate, Time, Status, HoursWorked) VALUES (8001, 991234, 105, 232, TO_DATE('2025-05-01', 'YYYY-MM-DD'), '09:00 am', 'Present', 8.0);
+INSERT INTO ATTENDANCE_T (Attendance_ID, Emp_ID, Dep_ID, LeaveType_ID, AttendanceDate, Time, Status, HoursWorked) VALUES (8002, 991235, 101, 138, TO_DATE('2025-04-15', 'YYYY-MM-DD'), '09:15 am', 'On Leave', 0.0);
+INSERT INTO ATTENDANCE_T (Attendance_ID, Emp_ID, Dep_ID, LeaveType_ID, AttendanceDate, Time, Status, HoursWorked) VALUES (8003, 991236, 103, 423, TO_DATE('2025-03-10', 'YYYY-MM-DD'), '08:30 am', 'Absent', 0.0);
+INSERT INTO ATTENDANCE_T (Attendance_ID, Emp_ID, Dep_ID, LeaveType_ID, AttendanceDate, Time, Status, HoursWorked) VALUES (8004, 991237, 102, 652, TO_DATE('2025-02-20', 'YYYY-MM-DD'), '09:00 am', 'Present', 8.0);
+INSERT INTO ATTENDANCE_T (Attendance_ID, Emp_ID, Dep_ID, LeaveType_ID, AttendanceDate, Time, Status, HoursWorked) VALUES (8005, 991238, 104, 110, TO_DATE('2025-01-05', 'YYYY-MM-DD'), '09:00 am', 'Present', 8.0);
+SELECT * FROM ATTENDANCE_T;
+
+
+
+
+CREATE TABLE ADVANCE_T (
+  Advance_ID NUMBER PRIMARY KEY,
+  Emp_ID NUMBER,
+  Fund_ID NUMBER,
+  AdvanceTypeName VARCHAR2(100),
+  AdvanceTypeDescription VARCHAR2(200),
+  AdvanceAmount NUMBER,
+  AdvanceDate DATE,
+  RepaymentStatus VARCHAR2(20) CHECK (RepaymentStatus IN ('Paid', 'Pending')),
+  RemainingBalance NUMBER,
+  CONSTRAINT FK_Advance_Emp FOREIGN KEY (Emp_ID) REFERENCES EMPLOYEE_T(Emp_ID),
+  CONSTRAINT FK_Advance_Fund FOREIGN KEY (Fund_ID) REFERENCES FUND_T(Fund_ID)
+);
+INSERT INTO ADVANCE_T (Advance_ID, Emp_ID, Fund_ID, AdvanceTypeName, AdvanceTypeDescription, AdvanceAmount, AdvanceDate, RepaymentStatus, RemainingBalance) VALUES (5432, 991234, 789, 'Medical Advance', 'Advance taken for surgery expenses', 2000, TO_DATE('2025-04-15', 'YYYY-MM-DD'), 'Paid', 0);
+INSERT INTO ADVANCE_T (Advance_ID, Emp_ID, Fund_ID, AdvanceTypeName, AdvanceTypeDescription, AdvanceAmount, AdvanceDate, RepaymentStatus, RemainingBalance) VALUES (5433, 991235, 790, 'Emergency Advance', 'Advance for urgent family emergency', 1500, TO_DATE('2025-04-18', 'YYYY-MM-DD'), 'Pending', 500);
+INSERT INTO ADVANCE_T (Advance_ID, Emp_ID, Fund_ID, AdvanceTypeName, AdvanceTypeDescription, AdvanceAmount, AdvanceDate, RepaymentStatus, RemainingBalance) VALUES (5434, 991236, 791, 'Education Advance', 'Advance taken for child’s tuition fee', 2500, TO_DATE('2025-03-20', 'YYYY-MM-DD'), 'Paid', 0);
+INSERT INTO ADVANCE_T (Advance_ID, Emp_ID, Fund_ID, AdvanceTypeName, AdvanceTypeDescription, AdvanceAmount, AdvanceDate, RepaymentStatus, RemainingBalance) VALUES (5435, 991237, 792, 'Home Advance', 'Advance for minor home repairs', 1800, TO_DATE('2025-02-25', 'YYYY-MM-DD'), 'Pending', 800);
+INSERT INTO ADVANCE_T (Advance_ID, Emp_ID, Fund_ID, AdvanceTypeName, AdvanceTypeDescription, AdvanceAmount, AdvanceDate, RepaymentStatus, RemainingBalance) VALUES (5436, 991238, 793, 'Travel Advance', 'Advance taken for official travel arrangements', 2200, TO_DATE('2025-01-30', 'YYYY-MM-DD'), 'Paid', 0);
+SELECT * FROM ADVANCE_T;
+
+
+
+
+CREATE TABLE INSTALLMENTS_T (
+  Installment_ID NUMBER PRIMARY KEY,
+  Loan_ID NUMBER,
+  InstallmentDate DATE,
+  AmountPaid NUMBER,
+  RemainingBalance NUMBER,
+  InstallmentStatus VARCHAR2(20), 
+  TermName VARCHAR2(50),          
+  TermDuration VARCHAR2(20),      
+  CONSTRAINT FK_Installments_Loan FOREIGN KEY (Loan_ID) REFERENCES LOAN_T(Loan_ID)
+);
+INSERT INTO INSTALLMENTS_T (Installment_ID, Loan_ID, InstallmentDate, AmountPaid, RemainingBalance, InstallmentStatus, TermName, TermDuration) VALUES (6001, 4001, TO_DATE('2025-05-01', 'YYYY-MM-DD'), 1000, 4000, 'Paid', 'Short Term', '6 months');
+INSERT INTO INSTALLMENTS_T (Installment_ID, Loan_ID, InstallmentDate, AmountPaid, RemainingBalance, InstallmentStatus, TermName, TermDuration) VALUES (6002, 4002, TO_DATE('2025-04-15', 'YYYY-MM-DD'), 800, 7200, 'Pending', 'Medium Term', '12 months');
+INSERT INTO INSTALLMENTS_T (Installment_ID, Loan_ID, InstallmentDate, AmountPaid, RemainingBalance, InstallmentStatus, TermName, TermDuration) VALUES (6003, 4003, TO_DATE('2025-04-10', 'YYYY-MM-DD'), 1500, 1500, 'Paid', 'Short Term', '4 months');
+INSERT INTO INSTALLMENTS_T (Installment_ID, Loan_ID, InstallmentDate, AmountPaid, RemainingBalance, InstallmentStatus, TermName, TermDuration) VALUES (6004, 4004, TO_DATE('2025-03-20', 'YYYY-MM-DD'), 1000, 3000, 'Pending', 'Short Term', '6 months');
+INSERT INTO INSTALLMENTS_T (Installment_ID, Loan_ID, InstallmentDate, AmountPaid, RemainingBalance, InstallmentStatus, TermName, TermDuration) VALUES (6005, 4005, TO_DATE('2025-02-28', 'YYYY-MM-DD'), 1200, 1200, 'Paid', 'Short Term', '3 months');
+SELECT * FROM INSTALLMENTS_T;
+DESC INSTALLMENTS_T;
+SELECT AmountPaid FROM system.INSTALLMENTS_T WHERE Loan_ID = 4001;
+ALTER PROCEDURE calculate_net_salary COMPILE;
+SHOW ERROR;
+SELECT COLUMN_NAME
+FROM ALL_TAB_COLUMNS
+WHERE TABLE_NAME = 'INSTALLMENTS_T';
+
+
+
+
+
+CREATE TABLE DEDUCTIONS_T (
+  Deduction_ID NUMBER PRIMARY KEY,
+  Emp_ID NUMBER,
+  Transaction_ID NUMBER,
+  Dep_ID NUMBER,
+  Fund_ID NUMBER,
+  TaxType VARCHAR2(20),   
+  TransportCharges NUMBER,
+  DietCharges NUMBER,
+  WaterCharges NUMBER,
+  GroupInsurance NUMBER,
+  ElectricityCharges NUMBER,
+  GasCharges NUMBER,
+  TV_Lic_Charges NUMBER,
+  HouseRent NUMBER,
+  MaintenanceCharges NUMBER,
+  DeductionAmount NUMBER,
+  DeductionDate DATE,
+  CONSTRAINT FK_Deductions_Emp FOREIGN KEY (Emp_ID) REFERENCES EMPLOYEE_T(Emp_ID),
+  CONSTRAINT FK_Deductions_Transaction FOREIGN KEY (Transaction_ID) REFERENCES PAYROLL_T(Transaction_ID),
+  CONSTRAINT FK_Deductions_Dep FOREIGN KEY (Dep_ID) REFERENCES DEPARTMENT_T(Dep_ID),
+  CONSTRAINT FK_Deductions_Fund FOREIGN KEY (Fund_ID) REFERENCES FUND_T(Fund_ID)
+);
+SELECT * FROM DEDUCTIONS_T;
+
+
+
+
+
+
+CREATE TABLE BENEFIT_T (
+  Benefit_ID NUMBER PRIMARY KEY,
+  Emp_ID NUMBER,
+  BenefitType VARCHAR2(50),
+  BenefitAmount NUMBER,
+  BenefitStatus VARCHAR2(20), 
+  CONSTRAINT FK_Benefit_Emp FOREIGN KEY (Emp_ID) REFERENCES EMPLOYEE_T(Emp_ID)
+);
+INSERT INTO BENEFIT_T (Benefit_ID, Emp_ID, BenefitType, BenefitAmount, BenefitStatus) VALUES (692, 991234, 'Health', 5000, 'Active');
+INSERT INTO BENEFIT_T (Benefit_ID, Emp_ID, BenefitType, BenefitAmount, BenefitStatus) VALUES (693, 991235, 'Transport', 3000, 'Active');
+INSERT INTO BENEFIT_T (Benefit_ID, Emp_ID, BenefitType, BenefitAmount, BenefitStatus) VALUES (694, 991236, 'Meal', 2500, 'Inactive');
+INSERT INTO BENEFIT_T (Benefit_ID, Emp_ID, BenefitType, BenefitAmount, BenefitStatus) VALUES (695, 991237, 'Housing', 8000, 'Active');
+INSERT INTO BENEFIT_T (Benefit_ID, Emp_ID, BenefitType, BenefitAmount, BenefitStatus) VALUES (696, 991238, 'Education', 4500, 'Active');
+SELECT * FROM BENEFIT_T;
+
+
+
+CREATE TABLE RECORDS_T (
+  Record_ID NUMBER PRIMARY KEY,
+  Emp_ID NUMBER,
+  Transaction_ID NUMBER,
+  RecordDate DATE,
+  Remarks VARCHAR2(200),
+  CONSTRAINT FK_Record_Emp FOREIGN KEY (Emp_ID) REFERENCES EMPLOYEE_T(Emp_ID),
+  CONSTRAINT FK_Record_Transaction FOREIGN KEY (Transaction_ID) REFERENCES PAYROLL_T(Transaction_ID)
+);
+INSERT INTO RECORDS_T (Record_ID, Emp_ID, Transaction_ID, RecordDate, Remarks) VALUES (21, 991234, 91, TO_DATE('2025-01-15', 'YYYY-MM-DD'), 'Initial payroll record');
+INSERT INTO RECORDS_T (Record_ID, Emp_ID, Transaction_ID, RecordDate, Remarks) VALUES (22, 991235, 92, TO_DATE('2025-02-15', 'YYYY-MM-DD'), 'Bonus payment for Q1-2025');
+INSERT INTO RECORDS_T (Record_ID, Emp_ID, Transaction_ID, RecordDate, Remarks) VALUES (23, 991236, 93, TO_DATE('2025-03-10', 'YYYY-MM-DD'), 'Tax deduction for March');
+INSERT INTO RECORDS_T (Record_ID, Emp_ID, Transaction_ID, RecordDate, Remarks) VALUES (24, 991237, 94, TO_DATE('2025-04-01', 'YYYY-MM-DD'), 'Housing benefit update');
+INSERT INTO RECORDS_T (Record_ID, Emp_ID, Transaction_ID, RecordDate, Remarks) VALUES (25, 991238, 95, TO_DATE('2025-05-05', 'YYYY-MM-DD'), 'Advance payment for project');
+SELECT * FROM RECORDS_T;
+
+
+
+
+CREATE TABLE GROSSPAY_T (
+  GrossPay_ID NUMBER PRIMARY KEY,
+  Emp_ID NUMBER,
+  BasicSalary NUMBER,
+  HouseRentAllowance NUMBER,
+  ConveyanceAllowance NUMBER,
+  MedicalAllowance NUMBER,
+  LeaveEncashments NUMBER,
+  CONSTRAINT FK_GrossPay_Emp FOREIGN KEY (Emp_ID) REFERENCES EMPLOYEE_T(Emp_ID)
+);
+ALTER TABLE GROSSPAY_T ADD GrossSalary NUMBER;
+ALTER TABLE GROSSPAY_T ADD NetSalary NUMBER;
+ALTER TABLE GROSSPAY_T ADD SalaryMonth NUMBER;
+ALTER TABLE GROSSPAY_T ADD SalaryYear NUMBER;
+ALTER TABLE GROSSPAY_T DROP COLUMN SalaryMonth;
+ALTER TABLE GROSSPAY_T DROP COLUMN SalaryYear;
+DESC GROSSPAY_T;
+
+SELECT object_type FROM all_objects WHERE object_name = 'GROSSPAY_T';
+
+SELECT GP.GrossSalary, GP.NetSalary 
+FROM GROSSPAY_T GP 
+WHERE GP.EMP_ID = 991237; -- Use real EMP_ID
+
+
+ALTER TABLE GROSSPAY_T DROP COLUMN BasicSalary;
+ALTER TABLE GROSSPAY_T DROP COLUMN HouseRentAllowance;
+ALTER TABLE GROSSPAY_T DROP COLUMN LeaveEncashments;
+ALTER TABLE GROSSPAY_T DROP COLUMN MedicalAllowance;
+ALTER TABLE GROSSPAY_T DROP COLUMN ConveyanceAllowance;
+
+
+CREATE SEQUENCE GROSSPAY_SEQ START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE PROCEDURE CALCULATE_GROSSSALARY(p_Emp_ID IN NUMBER)
+IS
+  -- Variables to hold values from PAYGRADE_T
+  v_BasicSalary        PAYGRADE_T.BasicSalary%TYPE;
+  v_DearnessAllowance  PAYGRADE_T.DearnessAllowance%TYPE;
+  v_GradeBonus         PAYGRADE_T.GradeBonus%TYPE;
+  v_ProvidentFund      PAYGRADE_T.ProvidentFund%TYPE;
+
+  -- Variables to hold total bonus and benefit amount
+  v_TotalBonus         NUMBER := 0;
+  v_TotalBenefit       NUMBER := 0;
+
+  -- Variable to hold calculated gross salary
+  v_GrossSalary        NUMBER;
+
+  -- Variable to hold employee's grade ID
+  v_GradeID            PAYGRADE_T.Grade_ID%TYPE;
+
+BEGIN
+  -- Step 1: Get the employee's Grade ID
+  SELECT Grade_ID
+  INTO v_GradeID
+  FROM EMPLOYEE_T
+  WHERE Emp_ID = p_Emp_ID;
+
+  -- Step 2: Get pay components from PAYGRADE_T
+  SELECT BasicSalary, DearnessAllowance, GradeBonus, ProvidentFund
+  INTO v_BasicSalary, v_DearnessAllowance, v_GradeBonus, v_ProvidentFund
+  FROM PAYGRADE_T
+  WHERE Grade_ID = v_GradeID;
+
+  -- Step 3: Calculate total bonus for the employee
+  SELECT NVL(SUM(Amount), 0)
+  INTO v_TotalBonus
+  FROM BONUS_T
+  WHERE Emp_ID = p_Emp_ID AND PaymentStatus = 'Approved';
+
+  -- Step 4: Calculate total benefit for the employee
+  SELECT NVL(SUM(BenefitAmount), 0)
+  INTO v_TotalBenefit
+  FROM BENEFIT_T
+  WHERE Emp_ID = p_Emp_ID AND BenefitStatus = 'Active';
+
+  -- Step 5: Calculate gross salary
+  v_GrossSalary := v_BasicSalary + v_DearnessAllowance + v_GradeBonus + v_ProvidentFund
+                   + v_TotalBonus + v_TotalBenefit;
+
+  -- Step 6: Insert or update GROSSPAY_T
+  BEGIN
+    -- Try to update if the record already exists
+    UPDATE GROSSPAY_T
+    SET GrossSalary = v_GrossSalary
+    WHERE Emp_ID = p_Emp_ID;
+
+    -- If no rows were updated, insert a new record
+    IF SQL%ROWCOUNT = 0 THEN
+      INSERT INTO GROSSPAY_T (GrossPay_ID, Emp_ID, GrossSalary)
+      VALUES (GROSSPAY_SEQ.NEXTVAL, p_Emp_ID, v_GrossSalary);
+    END IF;
+  END;
+
+  COMMIT;
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    DBMS_OUTPUT.PUT_LINE('Employee or Grade not found for Emp_ID: ' || p_Emp_ID);
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('Error in payroll generation: ' || SQLERRM);
+END;
+/
+
+CREATE SEQUENCE TAXES_SEQ START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE PROCEDURE CALCULATE_TAXES(
+  p_Emp_ID   IN NUMBER,
+  p_TaxYear  IN VARCHAR2
+)
+IS
+  v_GrossSalary        GROSSPAY_T.GrossSalary%TYPE;
+  v_MonthlySalary      NUMBER;
+  v_TaxPercentage      NUMBER := 0;
+  v_TaxAmount          NUMBER;
+  v_Grade_ID           PAYGRADE_T.Grade_ID%TYPE;
+  v_TaxType            DEDUCTIONS_T.TaxType%TYPE;
+BEGIN
+  -- Step 1: Fetch Gross Salary and Grade ID for employee
+  SELECT GP.GrossSalary, E.Grade_ID
+  INTO v_GrossSalary, v_Grade_ID
+  FROM GROSSPAY_T GP
+  JOIN EMPLOYEE_T E ON GP.Emp_ID = E.Emp_ID
+  WHERE GP.Emp_ID = p_Emp_ID;
+
+  -- Step 2: Fetch Tax Type from DEDUCTIONS_T for current month
+  SELECT TaxType
+  INTO v_TaxType
+  FROM DEDUCTIONS_T
+  WHERE Emp_ID = p_Emp_ID
+    AND TO_CHAR(DeductionDate, 'MMYYYY') = TO_CHAR(SYSDATE, 'MMYYYY')
+    AND ROWNUM = 1; -- If multiple deductions exist, pick the first for the month
+
+  -- Step 3: Convert to Monthly Gross
+  v_MonthlySalary := v_GrossSalary / 12;
+
+  -- Step 4: Determine tax percentage based on tax type
+  IF LOWER(v_TaxType) = 'income' THEN
+    IF v_MonthlySalary <= 100000 THEN
+      v_TaxPercentage := 2.5;
+    ELSIF v_MonthlySalary <= 150000 THEN
+      v_TaxPercentage := 5;
+    ELSIF v_MonthlySalary <= 200000 THEN
+      v_TaxPercentage := 7.5;
+    ELSIF v_MonthlySalary <= 300000 THEN
+      v_TaxPercentage := 10;
+    ELSIF v_MonthlySalary <= 500000 THEN
+      v_TaxPercentage := 12.5;
+    ELSE
+      v_TaxPercentage := 15;
+    END IF;
+
+  ELSIF LOWER(v_TaxType) = 'trade' THEN
+    IF v_MonthlySalary <= 100000 THEN
+      v_TaxPercentage := 1.5;
+    ELSIF v_MonthlySalary <= 150000 THEN
+      v_TaxPercentage := 2.5;
+    ELSIF v_MonthlySalary <= 200000 THEN
+      v_TaxPercentage := 3.5;
+    ELSIF v_MonthlySalary <= 300000 THEN
+      v_TaxPercentage := 4.5;
+    ELSIF v_MonthlySalary <= 500000 THEN
+      v_TaxPercentage := 5.5;
+    ELSE
+      v_TaxPercentage := 6.5;
+    END IF;
+
+  ELSE
+    RAISE_APPLICATION_ERROR(-20001, 'Invalid Tax Type in DEDUCTIONS_T. Must be "income" or "trade".');
+  END IF;
+
+  -- Step 5: Calculate Tax Amount
+  v_TaxAmount := v_MonthlySalary * (v_TaxPercentage / 100);
+
+  -- Step 6: Insert tax record into TAX_T
+  INSERT INTO TAX_T (
+    Tax_ID, Emp_ID, Grade_ID, TaxPercentage, TaxAmount, TaxYear
+  )
+  VALUES (
+    TAX_SEQ.NEXTVAL, p_Emp_ID, v_Grade_ID, v_TaxPercentage, v_TaxAmount, p_TaxYear
+  );
+
+  COMMIT;
+
+  -- Optional Output
+  DBMS_OUTPUT.PUT_LINE('Tax record inserted for employee ' || p_Emp_ID);
+  DBMS_OUTPUT.PUT_LINE('Tax Type: ' || UPPER(v_TaxType));
+  DBMS_OUTPUT.PUT_LINE('Monthly Salary: ' || v_MonthlySalary);
+  DBMS_OUTPUT.PUT_LINE('Tax %: ' || v_TaxPercentage || '%, Tax Amount: ' || v_TaxAmount);
+
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    DBMS_OUTPUT.PUT_LINE('Error: Missing Gross Salary or Tax Type for Emp_ID: ' || p_Emp_ID);
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('Error calculating taxes: ' || SQLERRM);
+END;
+/
+
+
+CREATE OR REPLACE NONEDITIONABLE PROCEDURE CALCULATE_LEAVE_DEDUCTION(
+  p_Emp_ID       IN NUMBER,
+  p_NetSalary    IN NUMBER,
+  p_SalaryMonth  IN VARCHAR2, -- Format: 'YYYY-MM'
+  p_SalaryYear   IN NUMBER
+)
+IS
+  v_UnpaidLeaveDays    NUMBER := 0;
+  v_PerDaySalary       NUMBER;
+  v_TotalDeduction     NUMBER := 0;
+  v_FinalNetSalary     NUMBER;
+  v_WorkingDaysInMonth NUMBER := 22;
+BEGIN
+  -- Calculate per-day salary
+  v_PerDaySalary := p_NetSalary / v_WorkingDaysInMonth;
+
+  -- Calculate unpaid leave days in current month
+  FOR leave_rec IN (
+    SELECT StartDate, EndDate
+    FROM LEAVE_T
+    WHERE Emp_ID = p_Emp_ID
+      AND LeaveStatus = 'Approved'
+      AND TO_CHAR(StartDate, 'YYYY-MM') = p_SalaryMonth
+  )
+  LOOP
+    v_UnpaidLeaveDays := v_UnpaidLeaveDays + (leave_rec.EndDate - leave_rec.StartDate + 1);
+  END LOOP;
+
+  -- Calculate total leave deduction
+  v_TotalDeduction := v_UnpaidLeaveDays * v_PerDaySalary;
+
+  -- Subtract from provided net salary
+  v_FinalNetSalary := p_NetSalary - v_TotalDeduction;
+
+  -- Update deduction in PAYROLL_T
+  UPDATE PAYROLL_T
+  SET TotalDeduction = NVL(TotalDeduction, 0) + v_TotalDeduction
+  WHERE Emp_ID = p_Emp_ID
+    AND SalaryMonth = TO_CHAR(TO_DATE(p_SalaryMonth, 'YYYY-MM'), 'Mon')
+    AND SalaryYear = p_SalaryYear;
+
+  -- Update Net Salary in GROSSPAY_T
+  UPDATE GROSSPAY_T
+  SET NetSalary = v_FinalNetSalary
+  WHERE Emp_ID = p_Emp_ID;
+
+  COMMIT;
+
+  DBMS_OUTPUT.PUT_LINE('Final Net Salary after leave deduction: ' || v_FinalNetSalary);
+EXCEPTION
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
+
+-- Create a sequence to generate unique Transaction_IDs
+CREATE SEQUENCE payroll_transaction_seq
+START WITH 1
+INCREMENT BY 1
+NOCACHE
+NOCYCLE;
+
+
+CREATE OR REPLACE NONEDITIONABLE PROCEDURE calculate_net_salary(p_emp_id IN NUMBER) AS
+  v_grade_id            NUMBER;
+  v_gross_salary        NUMBER;
+  v_total_deductions    NUMBER := 0;
+
+  v_loan_amount         NUMBER := 0;
+  v_remaining_balance   NUMBER := 0;
+  v_advance_amount      NUMBER := 0;
+  v_fund_balance        NUMBER := 0;
+  v_tax_deduction       NUMBER := 0;
+  v_net_salary          NUMBER;
+  v_leave_deduction     NUMBER := 0;
+  v_unpaid_leave_days   NUMBER := 0;
+  v_per_day_salary      NUMBER;
+  v_loan_id             NUMBER;
+  v_month               VARCHAR2(10) := TO_CHAR(SYSDATE, 'Mon');
+  v_year                NUMBER := EXTRACT(YEAR FROM SYSDATE);
+BEGIN
+  -- Step 1: Get Grade ID
+  SELECT grade_id INTO v_grade_id
+  FROM employee_t
+  WHERE emp_id = p_emp_id;
+
+  -- Step 2: Get Gross Salary
+  SELECT grosssalary INTO v_gross_salary
+  FROM grosspay_t
+  WHERE emp_id = p_emp_id;
+
+  -- Step 3: Get Total Deduction
+  BEGIN
+    SELECT totaldeduction INTO v_total_deductions
+    FROM payroll_t
+    WHERE emp_id = p_emp_id
+      AND salarymonth = v_month
+      AND salaryyear = v_year;
+  EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+      v_total_deductions := 0;
+  END;
+
+  -- Step 4: Handle Loan Installment from INSTALLMENTS_T
+  BEGIN
+    SELECT loan_id INTO v_loan_id
+    FROM loan_t
+    WHERE emp_id = p_emp_id AND loanstatus = 'Approved';
+
+    SELECT NVL(amountpaid, 0), NVL(remainingbalance, 0)
+    INTO v_loan_amount, v_remaining_balance
+    FROM installments_t
+    WHERE loan_id = v_loan_id
+      AND installmentdate = TRUNC(SYSDATE);
+
+    -- Update remaining balance in loan_t
+    UPDATE loan_t
+    SET remainingbalance = remainingbalance - v_loan_amount
+    WHERE loan_id = v_loan_id;
+
+    -- Update installment record
+    UPDATE installments_t
+    SET amountpaid = amountpaid + v_loan_amount
+    WHERE loan_id = v_loan_id
+      AND installmentdate = TRUNC(SYSDATE);
+  EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+      v_loan_amount := 0;
+  END;
+
+  -- Step 5: Advance Recovery
+  SELECT NVL(SUM(RemainingBalance), 0)
+  INTO v_advance_amount
+  FROM advance_t
+  WHERE emp_id = p_emp_id
+    AND RepaymentStatus = 'Pending';
+
+  -- Step 6: Fund Recovery
+  SELECT NVL(SUM(Amount), 0)
+  INTO v_fund_balance
+  FROM fund_t
+  WHERE emp_id = p_emp_id
+    AND FundStatus = 'Approved';
+
+  UPDATE fund_t
+  SET GPF_Balance = GPF_Balance + v_fund_balance,
+      Amount = Amount - v_fund_balance
+  WHERE emp_id = p_emp_id
+    AND FundStatus = 'Approved';
+
+  -- Step 7: Tax Deduction
+  SELECT NVL(SUM(TaxAmount), 0)
+  INTO v_tax_deduction
+  FROM tax_t
+  WHERE emp_id = p_emp_id AND tax_id >= 3006;
+
+  -- Step 8: Compute Unpaid Leave Deduction
+  v_per_day_salary := v_gross_salary / 22;  -- Assuming 22 working days in the month
+
+  FOR leave_rec IN (
+    SELECT StartDate, EndDate
+    FROM LEAVE_T
+    WHERE Emp_ID = p_emp_id
+      AND LeaveStatus = 'Approved'
+      AND TO_CHAR(StartDate, 'YYYY-MM') = TO_CHAR(SYSDATE, 'YYYY-MM')
+  )
+  LOOP
+    v_unpaid_leave_days := v_unpaid_leave_days + (leave_rec.EndDate - leave_rec.StartDate + 1);
+  END LOOP;
+
+  v_leave_deduction := v_unpaid_leave_days * v_per_day_salary;
+
+  -- Step 9: Compute Final Net Salary
+  v_net_salary := v_gross_salary - (
+                    v_total_deductions + v_loan_amount + v_advance_amount + 
+                    v_fund_balance + v_tax_deduction + v_leave_deduction
+                 );
+
+  -- Step 10: Update Payroll Total Deductions (optional tracking)
+  UPDATE payroll_t
+  SET totaldeduction = v_total_deductions + v_leave_deduction
+  WHERE emp_id = p_emp_id
+    AND salarymonth = v_month
+    AND salaryyear = v_year;
+
+  -- Step 11: Store Net Salary in GrossPay Table
+  UPDATE grosspay_t
+  SET netsalary = v_net_salary
+  WHERE emp_id = p_emp_id;
+
+  COMMIT;
+
+  DBMS_OUTPUT.PUT_LINE('Net Salary for Emp_ID ' || p_emp_id || ' = ' || v_net_salary);
+
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    DBMS_OUTPUT.PUT_LINE('Employee ID not found.');
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('Unexpected error: ' || SQLERRM);
+END;
+/
+
+
+DESCRIBE INSTALLMENTS_T;
+
+
+
+
+
+
+
+
+
+
+CREATE VIEW HR_MANAGER_VIEW AS
+SELECT 
+    E.Emp_ID,
+    E.Emp_Name,
+    E.Designation,
+    D.DepName,
+    E.DOJ,
+    E.Email,
+    E.Contact,
+    L.LeaveStatus,
+    A.AttendanceDate,
+    A.Status AS AttendanceStatus
+FROM 
+    EMPLOYEE_T E
+JOIN DEPARTMENT_T D ON E.Dep_ID = D.Dep_ID
+LEFT JOIN LEAVE_T L ON E.Emp_ID = L.Emp_ID
+LEFT JOIN ATTENDANCE_T A ON E.Emp_ID = A.Emp_ID;
+SELECT * FROM HR_MANAGER_VIEW;
+
+
+CREATE OR REPLACE VIEW FINAL_PAYROLL_VIEW AS
+SELECT 
+    -- Payroll & Employee info
+    P.Transaction_ID,
+    E.Emp_ID,
+    E.Emp_Name,
+    PG.Grade_ID,
+
+    -- Foreign Keys (multiple matching entries allowed)
+    A.Attendance_ID,
+    T.Tax_ID,
+    B.Bonus_ID,
+    BA.BankAccount_ID,
+
+    -- Month & Year from TAX_T
+    T.TaxMonth,
+    T.TaxYear,
+
+    -- Leave and salary info
+    LT.MaxDays AS LeaveDays,
+    GP.NetSalary,
+    GP.GrossSalary,
+
+    -- Paygrade & Salary breakdown
+    PG.BasicSalary,
+    PG.DearnessAllowance,
+    PG.GradeBonus,
+    PG.ProvidentFund,
+
+    -- Itemized deductions
+    NVL(D.TransportCharges, 0)       AS TransportCharges,
+    NVL(D.DietCharges, 0)            AS DietCharges,
+    NVL(D.WaterCharges, 0)           AS WaterCharges,
+    NVL(D.GroupInsurance, 0)         AS GroupInsurance,
+    NVL(D.ElectricityCharges, 0)     AS ElectricityCharges,
+    NVL(D.GasCharges, 0)             AS GasCharges,
+    NVL(D.TV_Lic_Charges, 0)         AS TV_Lic_Charges,
+    NVL(D.HouseRent, 0)              AS HouseRent,
+    NVL(D.MaintenanceCharges, 0)     AS MaintenanceCharges,
+
+    -- Total Deductions
+    (
+        NVL(D.TransportCharges, 0) + NVL(D.DietCharges, 0) + NVL(D.WaterCharges, 0) +
+        NVL(D.GroupInsurance, 0) + NVL(D.ElectricityCharges, 0) + NVL(D.GasCharges, 0) +
+        NVL(D.TV_Lic_Charges, 0) + NVL(D.HouseRent, 0) + NVL(D.MaintenanceCharges, 0)
+    ) AS TotalDeduction,
+
+    -- Other Deductions
+    NVL(Loan.LoanInstallment, 0)     AS LoanDeduction,
+    NVL(Advance.RemainingAdvance, 0) AS AdvanceDeduction,
+    NVL(Fund.ApprovedFund, 0)        AS FundDeduction,
+    NVL(T.TaxAmount, 0)              AS TaxDeduction
+
+FROM EMPLOYEE_T E
+
+-- Payroll transaction
+JOIN PAYROLL_T P ON E.Emp_ID = P.Emp_ID
+
+-- Salary breakdown
+JOIN PAYGRADE_T PG ON E.Grade_ID = PG.Grade_ID
+JOIN GROSSPAY_T GP ON E.Emp_ID = GP.Emp_ID
+
+-- Attendance
+JOIN ATTENDANCE_T A ON E.Emp_ID = A.Emp_ID
+
+-- Tax (no filter by year anymore)
+JOIN TAX_T T ON E.Emp_ID = T.Emp_ID
+
+-- Bonus
+JOIN BONUS_T B ON E.Emp_ID = B.Emp_ID
+
+-- Bank Account
+JOIN BANKACCOUNT_T BA ON E.Emp_ID = BA.Emp_ID
+
+-- Leave Type via EmployeeLeave
+JOIN LEAVE_T EL ON E.Emp_ID = EL.Emp_ID
+JOIN LEAVETYPE_T LT ON EL.LeaveType_ID = LT.LeaveType_ID
+
+-- Deductions
+LEFT JOIN DEDUCTIONS_T D ON E.Emp_ID = D.Emp_ID
+
+-- Loan Deductions
+LEFT JOIN (
+    SELECT L.Emp_ID, SUM(NVL(I.AmountPaid, 0)) AS LoanInstallment
+    FROM LOAN_T L
+    JOIN INSTALLMENTS_T I ON L.Loan_ID = I.Loan_ID
+    WHERE L.LoanStatus = 'Approved'
+    GROUP BY L.Emp_ID
+) Loan ON E.Emp_ID = Loan.Emp_ID
+
+-- Advance Recovery
+LEFT JOIN (
+    SELECT Emp_ID, SUM(NVL(RemainingBalance, 0)) AS RemainingAdvance
+    FROM ADVANCE_T
+    WHERE RepaymentStatus = 'Pending'
+    GROUP BY Emp_ID
+) Advance ON E.Emp_ID = Advance.Emp_ID
+
+-- Fund Deduction
+LEFT JOIN (
+    SELECT Emp_ID, SUM(NVL(Amount, 0)) AS ApprovedFund
+    FROM FUND_T
+    WHERE FundStatus = 'Approved'
+    GROUP BY Emp_ID
+) Fund ON E.Emp_ID = Fund.Emp_ID;
+SELECT * FROM Final_payroll_view;
+DESC FINAL_PAYROLL_VIEW;
+DESC PAYROLL_T;
+
+
+
+
+
+CREATE OR REPLACE VIEW Employee_View AS
+SELECT 
+    E.Emp_ID, 
+    E.Emp_Name, 
+    E.Contact, 
+    E.Grade_ID, 
+
+    -- From GROSSPAY_T instead of PAYROLL_T
+    G.GrossSalary, 
+    G.NetSalary, 
+    
+    -- From PAYROLL_T
+    P.TotalDeduction, 
+    P.SalaryMonth, 
+    P.SalaryYear,
+
+    -- From DEDUCTIONS_T
+    D.DeductionAmount,
+    D.TaxType,
+    D.TransportCharges,
+    D.DietCharges,
+    D.WaterCharges,
+    D.GroupInsurance,
+    D.ElectricityCharges,
+    D.GasCharges,
+    D.TV_Lic_Charges,
+    D.HouseRent,
+    D.MaintenanceCharges,
+    D.DeductionDate
+
+FROM EMPLOYEE_T E
+LEFT JOIN PAYROLL_T P ON E.Emp_ID = P.Emp_ID
+LEFT JOIN DEDUCTIONS_T D ON P.Emp_ID = D.Emp_ID
+LEFT JOIN GROSSPAY_T G ON E.Emp_ID = G.Emp_ID
+WHERE P.Transaction_ID >= 96;  -- Added condition to filter by transaction_id
+
+
+
+
+CREATE VIEW DBA_VIEW AS
+SELECT 
+    E.Emp_ID,
+    E.Emp_Name,
+    E.Email,
+    E.Designation,
+    P.Transaction_ID,
+    P.SalaryMonth,
+    P.NetSalary,
+    T.TaxAmount,
+    D.DeductionAmount,
+    F.FundStatus,
+    A.AttendanceDate,
+    A.Status AS AttendanceStatus
+FROM EMPLOYEE_T E
+LEFT JOIN PAYROLL_T P ON E.Emp_ID = P.Emp_ID
+LEFT JOIN TAX_T T ON E.Emp_ID = T.Emp_ID
+LEFT JOIN DEDUCTIONS_T D ON E.Emp_ID = D.Emp_ID
+LEFT JOIN FUND_T F ON E.Emp_ID = F.Emp_ID
+LEFT JOIN RECORDS_T R ON P.Transaction_ID = R.Transaction_ID
+LEFT JOIN ATTENDANCE_T A ON E.Emp_ID = A.Emp_ID;
+SELECT * FROM DBA_VIEW;
+
+
+--PROCEDURES
+CREATE SEQUENCE PAYROLL_SEQ
+START WITH 1
+INCREMENT BY 1
+NOCACHE
+NOCYCLE;
+
+
+CREATE PROCEDURE generate_payroll(p_emp_id IN NUMBER, p_month IN VARCHAR2) AS
+  v_grade_id         NUMBER;
+  v_attendance_id    NUMBER;
+  v_tax_id           NUMBER;
+  v_bonus_id         NUMBER;
+  v_bank_id          NUMBER;
+  v_gross_salary     NUMBER;
+  v_total_deductions NUMBER;
+  v_tax_amount       NUMBER;
+  v_net_salary       NUMBER;
+  v_salary_year      NUMBER := TO_NUMBER(TO_CHAR(SYSDATE, 'YYYY'));
+  v_leave_days       NUMBER := 0;
+BEGIN
+  -- Get grade ID of employee
+  SELECT grade_id INTO v_grade_id
+  FROM employee_t
+  WHERE emp_id = p_emp_id;
+
+  -- Calculate gross salary
+  SELECT basicsalary + dearnessallowance + gradebonus
+  INTO v_gross_salary
+  FROM paygrade_t
+  WHERE grade_id = v_grade_id;
+
+  -- Get total deductions
+  SELECT NVL(SUM(deductionamount), 0)
+  INTO v_total_deductions
+  FROM deductions_t
+  WHERE emp_id = p_emp_id;
+
+  -- Get total tax amount
+  SELECT NVL(SUM(taxamount), 0)
+  INTO v_tax_amount
+  FROM tax_t
+  WHERE emp_id = p_emp_id;
+
+  -- Calculate net salary
+  v_net_salary := v_gross_salary - (v_total_deductions + v_tax_amount);
+
+  -- Get attendance ID
+  SELECT attendance_id INTO v_attendance_id
+  FROM attendance_t
+  WHERE emp_id = p_emp_id AND ROWNUM = 1;
+
+  -- Get tax ID
+  SELECT tax_id INTO v_tax_id
+  FROM tax_t
+  WHERE emp_id = p_emp_id AND ROWNUM = 1;
+
+  -- Get bonus ID
+  SELECT bonus_id INTO v_bonus_id
+  FROM bonus_t
+  WHERE emp_id = p_emp_id AND ROWNUM = 1;
+
+  -- Get bank account ID
+  SELECT bankaccount_id INTO v_bank_id
+  FROM bankaccount_t
+  WHERE emp_id = p_emp_id AND ROWNUM = 1;
+
+  -- Insert payroll record
+  INSERT INTO payroll_t (
+    transaction_id, emp_id, grade_id, attendance_id, tax_id, bonus_id, bankaccount_id,
+    grosssalary, netsalary, salarymonth, salaryyear, leavedays, totaldeduction, paymentstatus
+  ) VALUES (
+    PAYROLL_SEQ.NEXTVAL, p_emp_id, v_grade_id, v_attendance_id, v_tax_id, v_bonus_id, v_bank_id,
+    v_gross_salary, v_net_salary, p_month, v_salary_year, v_leave_days, v_total_deductions, 'Pending'
+  );
+
+  -- Output message
+  DBMS_OUTPUT.PUT_LINE('Payroll generated for Employee ID ' || p_emp_id);
+END;
+/
+
+CREATE SEQUENCE DEDUCTION_SEQ START WITH 1000 INCREMENT BY 1;
+
+CREATE PROCEDURE apply_deductions(p_emp_id IN NUMBER, p_amount IN NUMBER) AS
+  v_transaction_id NUMBER;
+  v_dep_id         NUMBER;
+  v_fund_id        NUMBER;
+BEGIN
+  SELECT dep_id INTO v_dep_id FROM employee_t WHERE emp_id = p_emp_id;
+  SELECT transaction_id INTO v_transaction_id FROM payroll_t WHERE emp_id = p_emp_id AND ROWNUM = 1;
+  SELECT fund_id INTO v_fund_id FROM fund_t WHERE emp_id = p_emp_id AND ROWNUM = 1;
+
+  INSERT INTO deductions_t (
+    deduction_id, emp_id, transaction_id, dep_id, fund_id,
+    taxtype, transportcharges, dietcharges, watercharges,
+    groupinsurance, electricitycharges, gascharges,
+    tv_lic_charges, houserent, maintenancecharges,
+    deductionamount, deductiondate
+  ) VALUES (
+    DEDUCTION_SEQ.NEXTVAL, p_emp_id, v_transaction_id, v_dep_id, v_fund_id,
+    'Income', 100, 100, 100,
+    100, 100, 100,
+    100, 100, 100,
+    p_amount, SYSDATE
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Deduction of ' || p_amount || ' applied to Emp_ID ' || p_emp_id);
+END;
+/
+
+
+CREATE PROCEDURE Insert_Employee (
+  p_emp_id           IN NUMBER,
+  p_grade_id         IN NUMBER,
+  p_dep_id           IN NUMBER,
+  p_emp_name         IN VARCHAR2,
+  p_dob              IN DATE,
+  p_doj              IN DATE,
+  p_city             IN VARCHAR2,
+  p_state            IN VARCHAR2,
+  p_contact          IN VARCHAR2,
+  p_designation      IN VARCHAR2,
+  p_residencystatus  IN VARCHAR2,
+  p_cnic             IN NUMBER,
+  p_gender           IN VARCHAR2,
+  p_marital_status   IN VARCHAR2,
+  p_email            IN VARCHAR2,
+  p_bank_account     IN VARCHAR2,
+  p_is_active        IN CHAR
+) AS
+BEGIN
+  INSERT INTO employee_t (
+    emp_id, grade_id, dep_id, emp_name, dob, doj,
+    city, state, contact, designation, residencystatus, cnic,
+    gender, maritalstatus, email, bankaccnumber, isactive
+  ) VALUES (
+    p_emp_id, p_grade_id, p_dep_id, p_emp_name, p_dob, p_doj,
+    p_city, p_state, p_contact, p_designation, p_residencystatus, p_cnic,
+    p_gender, p_marital_status, p_email, p_bank_account, p_is_active
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Employee ' || p_emp_name || ' inserted successfully with ID ' || p_emp_id);
+END;
+/
+
+CREATE PROCEDURE Update_Employee (
+  p_emp_id           IN NUMBER,
+  p_grade_id         IN NUMBER,
+  p_dep_id           IN NUMBER,
+  p_emp_name         IN VARCHAR2,
+  p_dob              IN DATE,
+  p_doj              IN DATE,
+  p_city             IN VARCHAR2,
+  p_state            IN VARCHAR2,
+  p_contact          IN VARCHAR2,
+  p_designation      IN VARCHAR2,
+  p_residencystatus  IN VARCHAR2,
+  p_cnic             IN NUMBER,
+  p_gender           IN VARCHAR2,
+  p_marital_status   IN VARCHAR2,
+  p_email            IN VARCHAR2,
+  p_bank_account     IN VARCHAR2,
+  p_is_active        IN CHAR
+) AS
+BEGIN
+  UPDATE employee_t
+  SET
+    grade_id = p_grade_id,
+    dep_id = p_dep_id,
+    emp_name = p_emp_name,
+    dob = p_dob,
+    doj = p_doj,
+    city = p_city,
+    state = p_state,
+    contact = p_contact,
+    designation = p_designation,
+    residencystatus = p_residencystatus,
+    cnic = p_cnic,
+    gender = p_gender,
+    maritalstatus = p_marital_status,
+    email = p_email,
+    bankaccnumber = p_bank_account,
+    isactive = p_is_active
+  WHERE emp_id = p_emp_id;
+  
+  DBMS_OUTPUT.PUT_LINE('Employee ' || p_emp_id || ' updated successfully.');
+END;
+/
+
+
+CREATE PROCEDURE Update_Employee_Salary (
+  p_emp_id IN NUMBER, p_new_salary IN NUMBER
+) AS
+  v_grade_id NUMBER;
+BEGIN
+  SELECT grade_id INTO v_grade_id FROM employee_t WHERE emp_id = p_emp_id;
+
+  UPDATE paygrade_t
+  SET basicsalary = p_new_salary
+  WHERE grade_id = v_grade_id;
+
+  DBMS_OUTPUT.PUT_LINE('Salary updated for Emp_ID ' || p_emp_id);
+END;
+/
+
+CREATE OR REPLACE PROCEDURE generate_tax_reports(p_tax_year IN VARCHAR2) AS
+  v_tax_percent   NUMBER := 10;
+  v_tax_amount    NUMBER;
+  v_count         NUMBER;
+
+  CURSOR emp_cursor IS
+    SELECT e.emp_id, e.grade_id, pg.basicsalary
+    FROM employee_t e
+    JOIN paygrade_t pg ON e.grade_id = pg.grade_id;
+
+BEGIN
+  FOR emp_rec IN emp_cursor LOOP
+    -- Check if a tax record exists for the employee and year
+    SELECT COUNT(*) INTO v_count
+    FROM tax_t
+    WHERE emp_id = emp_rec.emp_id AND taxyear = p_tax_year;
+
+    -- Try to get existing tax percentage for that year (if any)
+    BEGIN
+      SELECT taxpercentage INTO v_tax_percent
+      FROM tax_t
+      WHERE emp_id = emp_rec.emp_id AND taxyear = p_tax_year AND ROWNUM = 1;
+    EXCEPTION
+      WHEN NO_DATA_FOUND THEN
+        v_tax_percent := 10; -- default to 10%
+    END;
+
+    -- Calculate tax amount
+    v_tax_amount := (emp_rec.basicsalary * v_tax_percent) / 100;
+
+    IF v_count = 0 THEN
+      -- Insert new tax record
+      INSERT INTO tax_t (
+        tax_id, emp_id, grade_id, taxpercentage, taxamount, taxyear
+      ) VALUES (
+        TAX_SEQ.NEXTVAL, emp_rec.emp_id, emp_rec.grade_id,
+        v_tax_percent, v_tax_amount, p_tax_year
+      );
+    ELSE
+      -- Update existing tax record
+      UPDATE tax_t
+      SET taxpercentage = v_tax_percent,
+          taxamount = v_tax_amount
+      WHERE emp_id = emp_rec.emp_id AND taxyear = p_tax_year;
+    END IF;
+  END LOOP;
+
+  DBMS_OUTPUT.PUT_LINE('Tax reports generated for year ' || p_tax_year);
+END;
+/
+
+
+--TRIGGERS
+--Prevent Deletion of Active Employees
+--This trigger blocks deletion of employees whose isActive = 'Yes'.
+CREATE TRIGGER trg_prevent_active_employee_deletion
+BEFORE DELETE ON employee_t
+FOR EACH ROW
+BEGIN
+  IF :OLD.isactive = 'Yes' THEN
+    RAISE_APPLICATION_ERROR(-20001, 'Cannot delete an active employee.');
+  END IF;
+END;
+/
+
+
+--Audit Log on Employee Update
+--This trigger logs changes to an EMPLOYEE_LOG_T table (you’ll need to create it) whenever an employee's data is updated.
+CREATE TABLE employee_log_t (
+  log_id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  Emp_ID NUMBER,
+  action VARCHAR2(20),
+  old_name VARCHAR2(100),
+  new_name VARCHAR2(100),
+  change_date DATE
+);
+
+CREATE TRIGGER trg_employee_update_log
+AFTER UPDATE ON employee_t
+FOR EACH ROW
+BEGIN
+  INSERT INTO employee_log_t (Emp_ID, action, old_name, new_name, change_date)
+  VALUES (
+    :OLD.emp_id,
+    'UPDATE',
+    :OLD.emp_name,
+    :NEW.emp_name,
+    SYSDATE
+  );
+END;
+/
+
+
+--Auto-calculate Net Salary After Payroll Insert
+--Automatically calculate and update net salary when a payroll record is inserted.
+CREATE OR REPLACE NONEDITIONABLE TRIGGER trg_auto_net_salary
+BEFORE INSERT OR UPDATE ON PAYROLL_T
+FOR EACH ROW
+DECLARE
+  v_gross_salary NUMBER;
+BEGIN
+  -- Fetch GrossSalary from GROSSPAY_T based on Emp_ID
+  SELECT grosssalary
+  INTO v_gross_salary
+  FROM grosspay_t
+  WHERE emp_id = :NEW.emp_id;
+
+  -- Check if GrossSalary and TotalDeduction are not NULL
+  IF v_gross_salary IS NOT NULL AND :NEW.TOTALDEDUCTION IS NOT NULL THEN
+    :NEW.NETSALARY := v_gross_salary - :NEW.TOTALDEDUCTION;
+  ELSE
+    :NEW.NETSALARY := NULL;  -- or set to 0 if you prefer
+  END IF;
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    :NEW.NETSALARY := NULL;  -- Handle the case where no gross salary is found
+END;
+/
+
+
+--Trigger to Prevent Exceeding Maximum Leave Days
+--Checks during LEAVE_T insert that an employee is not taking more leave than allowed.
+CREATE OR REPLACE TRIGGER trg_leave_day_check
+BEFORE INSERT ON leave_t
+FOR EACH ROW
+DECLARE
+  v_max_days NUMBER;
+  v_requested_days NUMBER;
+BEGIN
+  -- Calculate the number of requested leave days
+  v_requested_days := :NEW.EndDate - :NEW.StartDate + 1;
+
+  -- Get the maximum allowed days from leavetype_t
+  SELECT maxdays INTO v_max_days
+  FROM leavetype_t
+  WHERE leavetype_id = :NEW.leavetype_id;
+
+  -- Check if requested days exceed the max allowed
+  IF v_requested_days > v_max_days THEN
+    RAISE_APPLICATION_ERROR(-20002, 'Leave exceeds allowed maximum days.');
+  END IF;
+END;
+/
+
+
+--Log Deletion of Deductions
+--Keeps a record of deleted deductions in a separate log table.
+CREATE TABLE deductions_log_t (
+  log_id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  Emp_ID NUMBER,
+  deduction_id NUMBER,
+  deleted_by VARCHAR2(100),
+  deleted_on DATE
+);
+
+CREATE TRIGGER trg_deduction_delete_log
+AFTER DELETE ON deductions_t
+FOR EACH ROW
+BEGIN
+  INSERT INTO deductions_log_t (Emp_ID, deduction_id, deleted_by, deleted_on)
+  VALUES (:OLD.emp_id, :OLD.deduction_id, USER, SYSDATE);
+END;
+/
+
+
+--ALERTS
+--Alert: Excessive Deductions (More than 50% of Gross Salary)
+CREATE PROCEDURE alert_excessive_deductions(p_emp_id IN NUMBER) AS
+  v_gross_salary NUMBER;
+  v_deductions   NUMBER;
+BEGIN
+  SELECT grosssalary INTO v_gross_salary
+  FROM payroll_t
+  WHERE emp_id = p_emp_id AND ROWNUM = 1;
+
+  SELECT NVL(SUM(deductionamount), 0) INTO v_deductions
+  FROM deductions_t
+  WHERE emp_id = p_emp_id;
+
+  IF v_deductions > (v_gross_salary * 0.5) THEN
+    DBMS_OUTPUT.PUT_LINE('⚠️ ALERT: Deductions exceed 50% of gross salary for employee ID ' || p_emp_id);
+  ELSE
+    DBMS_OUTPUT.PUT_LINE('✔️ Deductions are within acceptable limit.');
+  END IF;
+END;
+/
+
+
+
+--Alert: Employees With Overdue Loans
+CREATE PROCEDURE alert_overdue_loans IS
+  CURSOR overdue_cursor IS
+    SELECT emp_id, loan_id, remainingbalance
+    FROM loan_t
+    WHERE remainingbalance > 0 AND loanstatus = 'Pending';
+
+BEGIN
+  FOR emp IN overdue_cursor LOOP
+    DBMS_OUTPUT.PUT_LINE('⚠️ ALERT: Employee ID ' || emp.emp_id || ' has pending loan (Loan ID: ' || emp.loan_id || ') with balance ' || emp.remainingbalance);
+  END LOOP;
+END;
+/
+
+
+
+--Alert: Employees With Unpaid Payroll
+CREATE PROCEDURE alert_unpaid_payroll IS
+BEGIN
+  FOR r IN (
+    SELECT emp_id, salarymonth, salaryyear
+    FROM payroll_t
+    WHERE paymentstatus = 'Pending'
+  ) LOOP
+    DBMS_OUTPUT.PUT_LINE('⚠️ ALERT: Payroll for Employee ' || r.emp_id || ' for ' || r.salarymonth || ' ' || r.salaryyear || ' is still pending!');
+  END LOOP;
+END;
+/
+
+
+
+--Alert: Employees Without Bank Account Info
+CREATE PROCEDURE alert_missing_bank_info IS
+BEGIN
+  FOR r IN (
+    SELECT e.emp_id, e.emp_name
+    FROM employee_t e
+    WHERE NOT EXISTS (
+      SELECT 1 FROM bankaccount_t b WHERE b.emp_id = e.emp_id
+    )
+  ) LOOP
+    DBMS_OUTPUT.PUT_LINE('⚠️ ALERT: Bank info missing for Employee: ' || r.emp_name || ' (ID: ' || r.emp_id || ')');
+  END LOOP;
+END;
+/
+
+
+
+--Alert: Employees Exceeding Maximum Leaves Per Year
+CREATE OR REPLACE PROCEDURE alert_excessive_leaves(p_emp_id IN NUMBER) AS
+  v_total_leaves NUMBER;
+BEGIN
+  SELECT NVL(SUM(EndDate - StartDate + 1), 0)
+  INTO v_total_leaves
+  FROM leave_t
+  WHERE emp_id = p_emp_id AND EXTRACT(YEAR FROM StartDate) = EXTRACT(YEAR FROM SYSDATE);
+
+  IF v_total_leaves > 20 THEN
+    DBMS_OUTPUT.PUT_LINE('⚠️ ALERT: Employee ID ' || p_emp_id || ' has taken more than 20 days of leave this year!');
+  END IF;
+END;
+/
+
+
+
+
+
+
+CREATE TABLE USERS_T (
+    USER_ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    USERNAME VARCHAR2(50) UNIQUE NOT NULL,
+    PASSWORD VARCHAR2(100) NOT NULL,
+    ROLE VARCHAR2(30) NOT NULL
+);
+INSERT INTO USERS_T (USERNAME, PASSWORD, ROLE) VALUES ('hrlogin', 'hr123', 'HR Manager');
+INSERT INTO USERS_T (USERNAME, PASSWORD, ROLE) VALUES ('acclogin', 'acc123', 'Accountant');
+INSERT INTO USERS_T (USERNAME, PASSWORD, ROLE) VALUES ('emplogin', 'emp123', 'Employee');
+INSERT INTO USERS_T (USERNAME, PASSWORD, ROLE) VALUES ('dbalogin', 'dba123', 'DBA');
+SELECT * FROM USERS_T;
+COMMIT;
+
+
+
+
+
